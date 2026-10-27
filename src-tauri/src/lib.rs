@@ -1,3 +1,6 @@
+mod account;
+#[cfg(feature = "desktop")]
+mod account_host;
 #[cfg(feature = "desktop")]
 mod downloads;
 #[cfg(feature = "desktop")]
@@ -28,6 +31,7 @@ pub fn run() {
             });
         })
         .setup(|app| {
+            app.manage(account::Account::new().map_err(std::io::Error::other)?);
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
             app.manage(
@@ -64,6 +68,12 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            account_host::account_start,
+            account_host::account_poll,
+            account_host::account_cancel,
+            account_host::account_status,
+            account_host::account_logout,
+            account_host::account_portal,
             media_proxy::media_open,
             media_proxy::media_close,
             host::window_minimize,

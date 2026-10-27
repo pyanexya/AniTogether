@@ -1,0 +1,31 @@
+name: Check Cloudflare backend
+on:
+  push:
+    branches: [main, "work/**"]
+    paths: ["cloudflare/**", ".github/workflows/check-cloudflare.yml", "src/shared/watch-together/**"]
+  pull_request:
+    paths: ["cloudflare/**", ".github/workflows/check-cloudflare.yml", "src/shared/watch-together/**"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: cloudflare-check-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloudflare
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: cloudflare/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run check

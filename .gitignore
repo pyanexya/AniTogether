@@ -30,3 +30,14 @@ anixart-oapi.json
 # Rust/Tauri generated outputs
 src-tauri/target/
 src-tauri/gen/
+
+# Optional native account boundary documentation
+!docs/desktop-account.md
+
+# Cloudflare source docs; never publish local auth/runtime state.
+!cloudflare/auth.md
+!cloudflare/rooms.md
+cloudflare/.wrangler/
+cloudflare/.wrangler-config/
+cloudflare/dist/
+cloudflare/.dev.vars*

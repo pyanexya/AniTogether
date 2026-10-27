@@ -57,3 +57,15 @@ HLS-скачивание/склейка пока недоступны: прил�
 ## Лицензия и происхождение
 
 GPL-2.0-only: [LICENSE](LICENSE). Сохранены авторские права исходного проекта и происхождение от AniXFlow/AniDesk. См. [FORK-NOTICE.md](FORK-NOTICE.md) и [исходный README](docs/UPSTREAM-README.md). При распространении бинарных файлов предоставляйте соответствующий исходный код.
+
+## Cloudflare backend (разработка)
+
+Новый backend в `cloudflare/`: Durable Objects для комнат, D1 для профилей и OAuth, отдельный браузерный портал. См. [контракты и настройку](cloudflare/auth.md) и [лимиты комнат](cloudflare/rooms.md). Конфигурация пока содержит заглушку ID базы; сервер не считается развёрнутым после одной сборки исходников. OAuth-кнопки включаются только при настоящих настройках провайдеров.
+
+```sh
+npm ci --prefix cloudflare
+npm test --prefix cloudflare
+npm run check --prefix cloudflare
+```
+
+Независимый аккаунт AnixArtix в настройках клиента использует системный браузер, одноразовый код и PKCE. Он не заменяет вход Anixart; токены приложения остаются в Rust и могут сохраняться в Windows Credential Manager по выбору пользователя. См. [desktop account](docs/desktop-account.md).

@@ -3,6 +3,7 @@ fn main() {
     if std::env::var_os("CARGO_FEATURE_DESKTOP").is_some() {
         tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
             tauri_build::AppManifest::new().commands(&[
+                "account_start", "account_poll", "account_cancel", "account_status", "account_logout", "account_portal",
                 "media_open",
                 "media_close",
                 "window_minimize",

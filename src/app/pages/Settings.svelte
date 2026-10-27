@@ -8,6 +8,7 @@
     import { localStorageWritable } from "@babichjacob/svelte-localstorage";
     import githubLogo from "../icons/github.svg";
     import Icon from "../components/elements/Icon.svelte";
+    import SettingsAccount from "../settings-pages/SettingsAccount.svelte";
     import SettingsApp from "../settings-pages/SettingsApp.svelte";
 
     const user_token = localStorageWritable("user_token", null);
@@ -29,6 +30,7 @@
 <div class="settings flex-row">
     <div class="settings-left-menu flex-column">
         <span class="settings-title">Основное</span>
+        <button class="settings-category flex-row" class:selected-category={viewInfo.page == SettingsAccount} onclick={() => setPage(SettingsAccount, null)}>Аккаунт AnixArtix</button>
         <button class="settings-category flex-row" class:selected-category={viewInfo.page == views[0]} onclick={() => setPage(views[0], null)}>Настройки пользователя</button>
         <button class="settings-category flex-row" class:selected-category={viewInfo.page == views[1]} onclick={() => setPage(views[1], null)}>Настройки приложения</button>
         <Separator marginRight={22}/>

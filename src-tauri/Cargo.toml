@@ -12,7 +12,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
 default = ["desktop"]
-desktop = ["dep:tauri-build", "dep:tauri", "dep:tauri-plugin-dialog", "dep:tauri-plugin-opener", "dep:tauri-plugin-notification", "dep:tauri-plugin-single-instance"]
+desktop = ["dep:keyring", "dep:tauri-build", "dep:tauri", "dep:tauri-plugin-dialog", "dep:tauri-plugin-opener", "dep:tauri-plugin-notification", "dep:tauri-plugin-single-instance"]
 
 [[bin]]
 name = "anixartix"
@@ -36,7 +36,12 @@ futures-util = "0.3"
 tempfile = "3"
 url = "2"
 regex = "1"
+sha2 = "0.10"
+base64 = "0.22"
 uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(windows)'.dependencies]
+keyring = { version = "3", optional = true, features = ["windows-native"] }
 
 [profile.release]
 codegen-units = 1

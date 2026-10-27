@@ -48,6 +48,12 @@
     "allow-download-episode",
     "allow-media-open",
     "allow-media-close",
-    "allow-offline-open"
+    "allow-offline-open",
+    "allow-account-start",
+    "allow-account-poll",
+    "allow-account-cancel",
+    "allow-account-status",
+    "allow-account-logout",
+    "allow-account-portal"
   ]
 }

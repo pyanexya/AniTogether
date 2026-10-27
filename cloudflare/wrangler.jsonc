@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "anixartix-backend",
+  "main": "src/index.mjs",
+  "compatibility_date": "2026-10-27",
+  "workers_dev": false,
+  "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": true, "html_handling": "none", "not_found_handling": "none" },
+  "vars": { "APP_ORIGIN": "https://aniartix.pyanexy.cc" },
+  "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "WatchRooms" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["WatchRooms"] }],
+  "d1_databases": [{ "binding": "DB", "database_name": "anixartix", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" }],
+  "triggers": { "crons": ["17 * * * *"] },
+  "observability": { "enabled": false }
+}
