@@ -10,6 +10,7 @@ using System.Security.AccessControl;
 using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -32,7 +33,14 @@ internal static class Setup
         // Preview never extracts or executes the embedded installer.
         bool preview = args.Length == 1 && args[0] == "--preview";
         if (args.Length != 0 && !preview) return 2;
-        using (var form = new SetupForm(preview)) { Application.Run(form); return form.Result; }
+        using (var mutex = new Mutex(false, @"Local\AnixArtix.Setup." + WindowsIdentity.GetCurrent().User.Value))
+        {
+            bool ownsMutex;
+            try { ownsMutex = mutex.WaitOne(0); } catch (AbandonedMutexException) { ownsMutex = true; }
+            if (!ownsMutex) { MessageBox.Show("Установщик AnixArtix уже открыт.", "AnixArtix"); return 1618; }
+            try { using (var form = new SetupForm(preview)) { Application.Run(form); return form.Result; } }
+            finally { mutex.ReleaseMutex(); }
+        }
     }
 }
 

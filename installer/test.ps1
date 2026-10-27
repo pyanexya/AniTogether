@@ -20,6 +20,14 @@ try {
         if ($frames -ne 239) { throw "Expected original 239-frame GIF, got $frames" }
         if (![Drawing.ImageAnimator]::CanAnimate($image)) { throw 'GIF is not animated' }
     } finally { $image.Dispose(); $resource.Dispose() }
+    # Construct the actual preview form/resources without starting an install.
+    $formType = $assembly.GetType('SetupForm')
+    $constructor = $formType.GetConstructor([Reflection.BindingFlags]'NonPublic,Instance', $null, [Type[]]@([bool]), $null)
+    $form = $constructor.Invoke(@($true))
+    try {
+        $form.CreateControl()
+        if ($form.Text -notlike 'AnixArtix*') { throw 'Preview form did not initialize' }
+    } finally { $form.Dispose() }
     $run = $assembly.GetType('SetupForm').GetMethod('RunPayload', [Reflection.BindingFlags]'NonPublic,Static')
     $before = @(Get-ChildItem ([IO.Path]::GetTempPath()) -Directory -Filter 'AnixArtix-*' | ForEach-Object Name)
     foreach ($exitCode in @(0, 1, 2, 3010, 1641)) {
