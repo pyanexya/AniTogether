@@ -1,0 +1,122 @@
+name: Publish verified AnixArtix prerelease
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: Successful Build AnixArtix Tauri run ID from main
+        required: true
+        type: string
+      commit:
+        description: Exact 40-character commit SHA of that successful build
+        required: true
+        type: string
+      confirm_publish:
+        description: Publish unsigned Windows test installer and corresponding source publicly
+        required: true
+        default: false
+        type: boolean
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: anixartix-publish-release
+  cancel-in-progress: false
+jobs:
+  release:
+    if: inputs.confirm_publish && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      BUILD_RUN_ID: ${{ inputs.build_run_id }}
+      BUILD_COMMIT: ${{ inputs.commit }}
+    steps:
+      - name: Verify immutable successful main build
+        run: |
+          set -euo pipefail
+          [[ "$BUILD_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$BUILD_COMMIT" =~ ^[a-f0-9]{40}$ ]]
+          gh api "repos/$GH_REPO" --jq ".private" | grep -qx false
+          gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN_ID" > "$RUNNER_TEMP/build-run.json"
+          jq -e --arg sha "$BUILD_COMMIT" --arg repo "$GH_REPO" '
+            .head_sha == $sha and .head_branch == "main" and
+            .head_repository.full_name == $repo and .conclusion == "success" and
+            .path == ".github/workflows/build-client.yml" and
+            (.event == "push" or .event == "workflow_dispatch")
+          ' "$RUNNER_TEMP/build-run.json"
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v7
+        with:
+          name: AnixArtix-Windows-x64-Tauri
+          path: release-input
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify installer and exact corresponding source
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p 'require("./package.json").version')
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          mkdir release-output
+          INSTALLER="AnixArtix_${VERSION}_x64-setup.exe"
+          mapfile -t MATCHES < <(find release-input -type f -name "$INSTALLER")
+          [[ ${#MATCHES[@]} -eq 1 ]]
+          cp "${MATCHES[0]}" "release-output/$INSTALLER"
+          # Recreate source from the exact successful commit, never the worktree.
+          git archive --format=zip --output="release-output/AnixArtix_${VERSION}_source.zip" "$BUILD_COMMIT"
+          python3 - <<'PY'
+          import zipfile, pathlib, re
+          archive=next(pathlib.Path('release-output').glob('*_source.zip'))
+          with zipfile.ZipFile(archive) as z:
+            names=z.namelist()
+            assert any(n.lower() in ('license','license.md','license.txt') for n in names), 'Missing source license'
+            assert 'package-lock.json' in names and 'src-tauri/Cargo.lock' in names, 'Missing build lockfiles'
+            forbidden=re.compile(r'(^|/)(\.env(?:\..*)?|\.dev\.vars(?:\..*)?|\.wrangler(?:-config)?|node_modules|target|\.git|\.aws)(/|$)')
+            secrets=re.compile(rb'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|(?:ghp_|github_pat_)[A-Za-z0-9_]{30,}|AKIA[A-Z0-9]{16}')
+            for n in names:
+              if n == '.env.example':
+                expected = b'# Shikimori OAuth Credentials\nSHIKIMORI_CLIENT_ID=your_shikimori_client_id_here\nSHIKIMORI_CLIENT_SECRET=your_shikimori_client_secret_here\n'
+                assert z.read(n).replace(b'\r\n', b'\n') == expected, 'Example environment must contain reviewed placeholders only'
+              else:
+                assert not forbidden.search(n), 'Forbidden source archive path'
+              if not n.endswith('/'):
+                assert not secrets.search(z.read(n)), 'Credential pattern in source archive; manual review required'
+          PY
+          DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          node cloudflare/scripts/prepare-download.mjs "release-output/$INSTALLER" "release-output/AnixArtix_${VERSION}_source.zip" "$VERSION" "$BUILD_COMMIT" "$DATE" github
+          (cd release-output && sha256sum *.exe *.zip > SHA256SUMS.txt)
+      - name: Publish new unsigned test prerelease (never overwrite)
+        run: |
+          set -euo pipefail
+          # Fail closed on existing tags/releases and API errors except a verified 404.
+          STATUS=$(curl -sS -o "$RUNNER_TEMP/tag.json" -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$GH_REPO/git/ref/tags/v$VERSION")
+          [[ "$STATUS" == 404 ]]
+          gh release create "v$VERSION" release-output/* --target "$BUILD_COMMIT" --prerelease --title "AnixArtix $VERSION · unsigned test build" --notes "Early Windows 10/11 x64 test build. Installer is unsigned; Windows SmartScreen may show an unknown publisher warning. Do not disable Windows protection. Corresponding GPL source and SHA-256 checksums are attached. Build commit: $BUILD_COMMIT."
+      - name: Verify uploaded public release bytes
+        env:
+          GH_TOKEN: ''
+        run: |
+          set -euo pipefail
+          mkdir verified
+          for FILE in release-output/*; do
+            NAME=$(basename "$FILE")
+            curl --fail --location --retry 3 --output "verified/$NAME" "https://github.com/$GH_REPO/releases/download/v$VERSION/$NAME"
+            cmp "$FILE" "verified/$NAME"
+          done
+      - uses: actions/upload-artifact@v7
+        with:
+          name: verified-public-downloads-manifest
+          path: cloudflare/public/downloads/release.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Next step
+        run: echo 'Release bytes verified anonymously. Review and commit the manifest artifact, then deploy Cloudflare. This workflow never changes main or enables a download before verification.' >> "$GITHUB_STEP_SUMMARY"

@@ -1,3 +1,4 @@
+import {downloads} from './downloads.mjs';
 import {boundedBytes,validatePng,encodeAvatar,avatarResponse} from './avatars.mjs';
 import {now,random,hash,setCookie,json,origin,sameOrigin,body,rate,session,csrf,publicProfile,validateProfile,fail,HttpError} from './security.mjs';
 import {available,startOAuth,completeOAuth} from './oauth.mjs';
@@ -13,10 +14,11 @@ export async function route(req,env) {
   const forwarded=new Request(req);forwarded.headers.set('X-AnixArtix-Client-Key',await hash(`watch:${Math.floor(now()/86400)}:${ip}`));
   return env.ROOMS.get(env.ROOMS.idFromName('anixartix-rooms-v1')).fetch(forwarded);
  }
+ if(p.startsWith('/downloads/'))return downloads(req,env);
  if(!p.startsWith('/api/')) {
   if(!env.ASSETS||!['GET','HEAD'].includes(m))fail(404,'not_found');
-  const path=['/','/profile','/desktop'].includes(p)?'/index.html':p;
-  if(!['/index.html','/styles.css','/app.js','/api.mjs','/avatar.mjs','/assets/icons/anixartix.png'].includes(path))fail(404,'not_found');
+  const path=['/','/profile','/desktop'].includes(p)?'/index.html':p==='/downloads'?'/downloads.html':p;
+  if(!['/downloads.html','/downloads.css','/downloads.js','/release.mjs','/index.html','/styles.css','/app.js','/api.mjs','/avatar.mjs','/assets/icons/anixartix.png'].includes(path))fail(404,'not_found');
   const asset=await env.ASSETS.fetch(new Request(new URL(path,req.url),req));const response=new Response(asset.body,asset);
   response.headers.set('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
   response.headers.set('X-Content-Type-Options','nosniff');response.headers.set('Referrer-Policy','no-referrer');response.headers.set('Cache-Control','no-store');return response;
