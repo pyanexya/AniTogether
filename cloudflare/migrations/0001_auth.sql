@@ -1,9 +1,9 @@
 PRAGMA foreign_keys = ON;
-CREATE TABLE users(id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE COLLATE NOCASE, display_name TEXT NOT NULL, bio TEXT NOT NULL DEFAULT '', avatar TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL);
-CREATE TABLE identities(provider TEXT NOT NULL, provider_id TEXT NOT NULL, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY(provider,provider_id), UNIQUE(user_id,provider));
-CREATE TABLE sessions(hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, csrf TEXT NOT NULL, expires INTEGER NOT NULL, created_at INTEGER NOT NULL);
-CREATE INDEX sessions_user ON sessions(user_id);
-CREATE TABLE oauth_states(hash TEXT PRIMARY KEY, provider TEXT NOT NULL, browser_hash TEXT NOT NULL, nonce TEXT NOT NULL, verifier TEXT NOT NULL, user_id TEXT, session_hash TEXT, expires INTEGER NOT NULL);
-CREATE TABLE desktop_grants(hash TEXT PRIMARY KEY, challenge TEXT NOT NULL, user_id TEXT REFERENCES users(id) ON DELETE CASCADE, expires INTEGER NOT NULL);
-CREATE TABLE shikimori_links(user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, provider_id TEXT NOT NULL UNIQUE, nickname TEXT NOT NULL, encrypted_tokens TEXT NOT NULL, expires INTEGER NOT NULL, updated_at INTEGER NOT NULL, refresh_lock TEXT, refresh_lock_until INTEGER NOT NULL DEFAULT 0);
-CREATE TABLE rate_limits(key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE COLLATE NOCASE, display_name TEXT NOT NULL, bio TEXT NOT NULL DEFAULT '', avatar TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS identities(provider TEXT NOT NULL, provider_id TEXT NOT NULL, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY(provider,provider_id), UNIQUE(user_id,provider));
+CREATE TABLE IF NOT EXISTS sessions(hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, csrf TEXT NOT NULL, expires INTEGER NOT NULL, created_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);
+CREATE TABLE IF NOT EXISTS oauth_states(hash TEXT PRIMARY KEY, provider TEXT NOT NULL, browser_hash TEXT NOT NULL, nonce TEXT NOT NULL, verifier TEXT NOT NULL, user_id TEXT, session_hash TEXT, expires INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS desktop_grants(hash TEXT PRIMARY KEY, challenge TEXT NOT NULL, user_id TEXT REFERENCES users(id) ON DELETE CASCADE, expires INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS shikimori_links(user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, provider_id TEXT NOT NULL UNIQUE, nickname TEXT NOT NULL, encrypted_tokens TEXT NOT NULL, expires INTEGER NOT NULL, updated_at INTEGER NOT NULL, refresh_lock TEXT, refresh_lock_until INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS rate_limits(key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL);

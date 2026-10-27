@@ -97,3 +97,9 @@ Official references checked 2026-10-27:
 - https://docs.discord.com/developers/topics/oauth2
 - https://shikimori.io/oauth
 - https://developers.cloudflare.com/d1/worker-api/prepared-statements/
+
+## Dashboard-first deployment
+
+The configured database ID is supplied by the owner for `anixartix`. The domain is `aniartix.pyanexy.cc`; no deployment is implied by configuration alone. On that intended database, its Console can run `migrations/0001_auth.sql` once before first deployment. The initial schema is idempotent and does not delete existing rows. Never run unrelated example SQL that drops tables. Later Wrangler migrations can record the initial migration safely, but no schema/data migration should be applied to a different database.
+
+Workers Builds should use this repository's `work/anixartix-tauri` branch, root directory `cloudflare`, Worker name `anixartix-backend`, and deploy command `npx wrangler deploy`. Cloudflare may require a user-approved build token/integration with appropriate account and custom-domain route permissions. Keep tokens in Cloudflare, never in chat or Git. Only enable a paid plan after explicit cost approval. OAuth secrets are configured separately; without them the corresponding provider remains unavailable.
