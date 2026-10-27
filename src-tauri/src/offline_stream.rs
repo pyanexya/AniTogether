@@ -94,7 +94,7 @@ pub(crate) async fn serve(
         .await
         .map_err(|_| "Offline metadata unavailable")?
         .len();
-    let bounds = match range_bounds(range, size) {
+    let bounds = match range_bounds(if method == "HEAD" { None } else { range }, size) {
         Ok(b) => b,
         Err(_) => {
             return header(
@@ -173,6 +173,7 @@ mod tests {
             ("GET", Some("bytes=3-5"), "206 Partial Content", "345"),
             ("GET", Some("bytes=20-"), "416 Range Not Satisfiable", ""),
             ("HEAD", None, "200 OK", ""),
+            ("HEAD", Some("bytes=3-5"), "200 OK", ""),
         ] {
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
             let addr = listener.local_addr().unwrap();

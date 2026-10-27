@@ -373,7 +373,7 @@ pub fn offline_download_episode(
     {
         return Err("Metadata exceeds limit".into());
     }
-    if (url.contains("m3u8") || url.contains(":hls:")) {
+    if url.contains("m3u8") || url.contains(":hls:") {
         return Err("Загрузка HLS пока недоступна: требуется перенос безопасной обработки плейлистов. Прямые MP4 можно скачать; онлайн-просмотр HLS остаётся доступен.".into());
     }
     let k = key(&anime_meta["id"], &episode_meta["id"])?;
@@ -618,13 +618,16 @@ pub async fn download_episode(
     url: String,
     default_file_name: Option<String>,
     referer: Option<String>,
-) -> Value {
-    let state = state.inner();
-    match export_episode(&app, &state, url, default_file_name, referer).await {
-        Ok(Some(path)) => json!({"success":true,"filePath":path}),
-        Ok(None) => json!({"success":false,"canceled":true}),
-        Err(error) => json!({"success":false,"error":error}),
-    }
+) -> Result<Value, String> {
+    // Own the cheap Arc-backed handle across awaits, not the IPC State borrow.
+    let downloads = state.inner().clone();
+    Ok(
+        match export_episode(&app, &downloads, url, default_file_name, referer).await {
+            Ok(Some(path)) => json!({"success":true,"filePath":path}),
+            Ok(None) => json!({"success":false,"canceled":true}),
+            Err(error) => json!({"success":false,"error":error}),
+        },
+    )
 }
 async fn export_episode(
     app: &tauri::AppHandle,
