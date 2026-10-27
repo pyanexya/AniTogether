@@ -14,8 +14,10 @@ jobs:
     name: Windows x64 Tauri
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: npm
@@ -32,7 +34,7 @@ jobs:
         run: cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --lib --locked
       - name: Build Windows installer
         run: npm run make:windows
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: AnixArtix-Windows-x64-Tauri
           path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
