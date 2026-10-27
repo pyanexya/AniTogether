@@ -16,7 +16,8 @@ export async function startOAuth(req,env,p,s) {
  return {url:u.href,cookie:setCookie('__Host-anixartix-oauth',browser,600)};
 }
 async function remoteJson(url,options={}) {
- const response=await fetch(url,{...options,redirect:'error',signal:AbortSignal.timeout(15000)});
+ // Workers supports only follow/manual; reject non-2xx below without forwarding credentials.
+ const response=await fetch(url,{...options,redirect:'manual',signal:AbortSignal.timeout(15000)});
  if(!response.ok)fail(502,'provider_request_failed');
  const reader=response.body?.getReader();if(!reader)fail(502,'provider_response_invalid');let size=0;const parts=[];
  while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>65536){await reader.cancel();fail(502,'provider_response_invalid');}parts.push(value);}
