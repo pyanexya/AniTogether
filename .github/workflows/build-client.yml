@@ -1,10 +1,10 @@
 name: Build AnixArtix Tauri
 on:
   push:
-    branches: [main, "work/**"]
-    paths: ["src/**", "src-tauri/**", "public/**", "icon/**", "test/**", "server/**", "package*.json", "*.config.*", "scripts/**", ".github/workflows/build-client.yml"]
+    branches: [main]
+    paths: ["src/**", "src-tauri/**", "public/**", "icon/**", "test/**", "server/**", "package*.json", "*.config.*", "scripts/**", "installer/**", ".github/workflows/build-client.yml"]
   pull_request:
-    paths: ["src/**", "src-tauri/**", "public/**", "icon/**", "test/**", "server/**", "package*.json", "*.config.*", "scripts/**", ".github/workflows/build-client.yml"]
+    paths: ["src/**", "src-tauri/**", "public/**", "icon/**", "test/**", "server/**", "package*.json", "*.config.*", "scripts/**", "installer/**", ".github/workflows/build-client.yml"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -19,6 +19,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - name: Test animated setup shell (harmless fixture)
+        shell: powershell
+        run: ./installer/test.ps1
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
@@ -36,9 +39,19 @@ jobs:
         run: cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --lib --locked
       - name: Build Windows installer
         run: npm run make:windows
+      - name: Package animated setup
+        shell: powershell
+        run: ./installer/build.ps1
+      - name: Package corresponding GPL source
+        shell: powershell
+        run: |
+          git archive --format=zip --prefix=AnixArtix-source/ --output=dist/installer/AnixArtix-source.zip ${{ github.sha }}
+          if ($LASTEXITCODE -ne 0) { throw 'Source archive failed' }
+          $hash = (Get-FileHash dist/installer/AnixArtix-source.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText("$pwd/dist/installer/AnixArtix-source.zip.sha256", "$hash  AnixArtix-source.zip`n")
       - uses: actions/upload-artifact@v7
         with:
           name: AnixArtix-Windows-x64-Tauri
-          path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+          path: dist/installer/*
           if-no-files-found: error
           retention-days: 14
