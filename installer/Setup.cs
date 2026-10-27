@@ -198,8 +198,7 @@ internal sealed class SetupForm : Form
         heading = AddLabel("Установка AnixArtix", 348, 119, 408, 44, 23, ForeColor);
         heading.Font = new Font("Segoe UI", 23, FontStyle.Bold);
         AddLabel("Всё для просмотра — в одном приложении.", 350, 169, 400, 26, 10, Muted);
-        AddLabel("Только для вашей учётной записи.
-Windows 10 / 11 · без прав администратора", 350, 212, 400, 48, 10, Muted);
+        AddLabel("Только для вашей учётной записи.\nWindows 10 / 11 · без прав администратора", 350, 212, 400, 48, 10, Muted);
         var license = new LinkLabel { Text = "Лицензия GPL-2.0 и авторы", Location = new Point(350, 276), Size = new Size(400, 26), LinkColor = Muted, ActiveLinkColor = Accent, VisitedLinkColor = Muted, LinkBehavior = LinkBehavior.HoverUnderline, TabIndex = 0 };
         license.LinkClicked += delegate { ShowLicense(); };
         Controls.Add(license);
