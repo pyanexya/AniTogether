@@ -3,7 +3,22 @@ fn main() {
     if std::env::var_os("CARGO_FEATURE_DESKTOP").is_some() {
         tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
             tauri_build::AppManifest::new().commands(&[
-                "account_start", "account_poll", "account_cancel", "account_status", "account_logout", "account_portal",
+                "account_start",
+                "account_poll",
+                "account_cancel",
+                "account_status",
+                "account_logout",
+                "account_portal",
+                "friends_list",
+                "friends_lookup",
+                "friends_request",
+                "friends_accept",
+                "friends_reject",
+                "friends_remove",
+                "watch_invites_list",
+                "watch_invite_send",
+                "watch_invite_accept",
+                "watch_invite_decline",
                 "media_open",
                 "media_close",
                 "window_minimize",

@@ -25,9 +25,12 @@ bootstrap({
     mountApp: async ({ default: App }) => {
         const { mount } = await import('svelte');
         mount(App, { target: document.body });
+        document.getElementById('startup-status')?.remove();
+        window.dispatchEvent(new Event('anixartix:ready'));
     },
 }).then(bridge => window.addEventListener('beforeunload', bridge.dispose, { once: true }))
 .catch(error => {
+    window.dispatchEvent(new Event('anixartix:ready'));
     console.error('Native startup failed', error);
     const panel = document.createElement('main');
     panel.style.cssText = 'max-width:640px;margin:12vh auto;padding:32px;font:16px system-ui;color:#eee;background:#24252b;border-radius:20px';

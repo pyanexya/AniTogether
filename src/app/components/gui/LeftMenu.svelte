@@ -21,6 +21,7 @@
     import SettingsIcon from "../../icons/settings.svg";
     import Settings from "../../pages/Settings.svelte";
     import Friends from "../../pages/Friends.svelte";
+    import FriendsAnixArtix from "../../pages/FriendsAnixArtix.svelte";
     import NotAvailable from "../../pages/NotAvailable.svelte";
     import CollectionIcon from "../../icons/collection.svg";
     import CollectionList from "../../pages/CollectionList.svelte";
@@ -30,6 +31,9 @@
     import Offline from "../../pages/Offline.svelte";
     import OfflineRelease from "../../pages/OfflineRelease.svelte";
     import DownloadIcon from "../../icons/download.svg";
+
+    import { accountState, accountAvatar, accountSymbol } from "../../platform/account-state.js";
+    export let onAccountLogin = () => {};
 
     export const views = [
         Home,
@@ -74,11 +78,12 @@
         { page: Pages.SEARCH, label: "Поиск", icon: SearchIcon, args: { query: null } },
         { page: Pages.BOOKMARKS, label: "Мой список", icon: BookmarkIcon, args: { typeBookmark: 0, sort: 1 } },
         { page: Pages.COLLECTION_LIST, label: "Коллекции", icon: CollectionIcon },
-        { page: Pages.FRIENDS, label: "Друзья", icon: FriendsIcon },
+        { page: Pages.FRIENDS, label: "Друзья Anixart", icon: FriendsIcon },
         { page: Pages.OFFLINE, label: "Загрузки", icon: DownloadIcon },
     ];
 
     window.updateViewportComponent = (page, args, history = false) => {
+        window.dispatchEvent(new Event('anixartix:navigate'));
         setViewportScrollEvent(null);
         viewInfoOld.viewportComponent = viewportComponent;
         viewInfoOld.args = argsComponent;
@@ -115,12 +120,6 @@
 	}
     };
 
-    let myProfile;
-    $: if (utoken && utoken.id) {
-        myProfile = anixApi.profile.info(utoken.id).catch(() => null);
-    } else {
-        myProfile = Promise.resolve(null);
-    }
 </script>
 
 <aside class="left-menu unselectable" class:hide={viewportComponent == views[Pages.PLAYER]} aria-label="Навигация">
@@ -130,6 +129,9 @@
     </button>
     <div class="section-label">ОБЗОР</div>
     <nav>
+        <button class="nav-item" class:selected={viewportComponent === FriendsAnixArtix} title="Друзья AnixArtix" onclick={() => updateViewportComponent(FriendsAnixArtix)}>
+            <Icon src={FriendsIcon} varColor="--main-text-color" size={{ width: 20, height: 20 }} /><span>Друзья AnixArtix</span>
+        </button>
         {#each navigation as item, index}
             {#if index === 3}<div class="section-label library-label">БИБЛИОТЕКА</div>{/if}
             <button class="nav-item" class:selected={viewportComponent === views[item.page] || (item.page === Pages.OFFLINE && viewportComponent === OfflineRelease)}
@@ -141,7 +143,7 @@
         {/each}
     </nav>
     <div class="bottom-menu-content">
-        <button class="nav-item" title="Уведомления" onclick={() => showNotifications = true}>
+        <button class="nav-item" title="Уведомления" onclick={() => utoken?.token ? showNotifications = true : updateViewportComponent(Pages.LOGIN)}>
             <Icon src={NotificationIcon} varColor="--main-text-color" size={{ width: 20, height: 20 }} />
             <span>Уведомления</span>
             {#if nCount > 0}<b class="count" aria-label={`${nCount} новых уведомлений`}>{nCount > 99 ? "99+" : nCount}</b>{/if}
@@ -150,11 +152,14 @@
             <Icon src={SettingsIcon} varColor="--main-text-color" size={{ width: 20, height: 20 }} />
             <span>Настройки</span>
         </button>
-        <button class="account" title={utoken ? "Мой профиль" : "Войти в Anixart"} onclick={() => updateViewportComponent(utoken ? Pages.PROFILE : Pages.LOGIN, utoken?.id)}>
-            {#await myProfile then profile}
-                <img src={profile?.profile?.avatar || "./assets/icons/defaultAvatar.svg"} alt="" width="34" height="34" />
-                <span><strong>{profile?.profile?.login || (utoken ? "Мой профиль" : "Войти в Anixart")}</strong><small>{utoken ? "Ваша библиотека" : "Списки, история и друзья"}</small></span>
-            {/await}
+        <button class="connection" title={utoken?.token ? "Профиль Anixart" : "Подключить Anixart для каталога"} onclick={() => updateViewportComponent(utoken?.token ? Pages.PROFILE : Pages.LOGIN, utoken?.id)}>
+            <span class:linked={Boolean(utoken?.token)} aria-hidden="true">●</span><span>Anixart: {utoken?.token ? "подключён" : "подключить"}</span>
+        </button>
+        <button class="account" title={$accountState?.status === 'authenticated' ? "Аккаунт AnixArtix" : "Войти в AnixArtix"} onclick={() => $accountState?.status === 'authenticated' ? updateViewportComponent(Pages.SETTINGS, {section: 'account'}) : onAccountLogin()}>
+            {#if accountAvatar($accountState?.profile)}
+                <img src={accountAvatar($accountState.profile)} alt="" width="34" height="34" referrerpolicy="no-referrer" onerror={event => { event.currentTarget.src = './assets/icons/defaultAvatar.svg'; }}/>
+            {:else}<span class="account-symbol" aria-hidden="true">{accountSymbol($accountState?.profile)}</span>{/if}
+            <span><strong>{$accountState?.profile?.displayName || $accountState?.profile?.username || "Войти в AnixArtix"}</strong><small>{$accountState?.status === 'authenticated' ? "Ваш аккаунт AnixArtix" : "Google / Discord"}</small></span>
         </button>
     </div>
 </aside>
@@ -163,6 +168,11 @@
 {/if}
 
 <style>
+    .connection { display:flex; gap:7px; align-items:center; width:100%; padding:10px 14px 0; text-align:left; color:var(--third-text-color); font-size:10px; }
+    .connection .linked { color:#73bb95; }
+    .account-symbol { display:grid; place-items:center; width:34px; height:34px; border-radius:11px; background:var(--accent-soft); color:var(--accent-color); font-size:22px; flex-shrink:0; }
+    @media(max-width:900px) { .connection { justify-content:center; padding:10px 0 0; } .connection span:last-child { display:none; } .account .account-symbol { display:grid; } }
+
     .left-menu { display:flex; flex-direction:column; flex:0 0 208px; width:208px; height:100%; box-sizing:border-box; background:var(--alt-background-color); border-right:1px solid var(--border-color); padding:20px 12px 12px; z-index:10; overflow-y:auto; }
     .brand { display:flex; align-items:center; gap:10px; text-align:left; padding:0 8px 25px; min-height:59px; flex-shrink:0; }
     .brand-text { font-size:17px; letter-spacing:-.6px; font-weight:750; }

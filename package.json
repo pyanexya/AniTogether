@@ -1,6 +1,6 @@
 {
   "name": "anixartix",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Independent anime desktop client with private watch-together rooms",
   "scripts": {
     "test": "vitest run --maxWorkers=2",

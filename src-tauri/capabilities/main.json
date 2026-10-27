@@ -54,6 +54,16 @@
     "allow-account-cancel",
     "allow-account-status",
     "allow-account-logout",
-    "allow-account-portal"
+    "allow-account-portal",
+    "allow-friends-list",
+    "allow-friends-lookup",
+    "allow-friends-request",
+    "allow-friends-accept",
+    "allow-friends-reject",
+    "allow-friends-remove",
+    "allow-watch-invites-list",
+    "allow-watch-invite-send",
+    "allow-watch-invite-accept",
+    "allow-watch-invite-decline"
   ]
 }

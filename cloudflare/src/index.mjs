@@ -1,3 +1,4 @@
+import {friendsRoute} from './friends.mjs';
 import {downloads} from './downloads.mjs';
 import {boundedBytes,validatePng,encodeAvatar,avatarResponse} from './avatars.mjs';
 import {now,random,hash,setCookie,json,origin,sameOrigin,body,rate,session,csrf,publicProfile,validateProfile,fail,HttpError} from './security.mjs';
@@ -70,6 +71,7 @@ export async function route(req,env) {
   const row=await env.DB.prepare('SELECT id,username,display_name,bio,avatar FROM users WHERE id=?').bind(p.slice('/api/profiles/'.length)).first();if(!row)fail(404,'profile_not_found');return json(publicProfile(row));
  }
  const s=await session(req,env);if(!['GET','HEAD'].includes(m))csrf(req,env,s);
+ const friendResponse=await friendsRoute(req,env,s);if(friendResponse)return friendResponse;
  if(p==='/api/me'&&m==='GET') {
   const row=await env.DB.prepare('SELECT * FROM users WHERE id=?').bind(s.user_id).first();
   const link=await env.DB.prepare('SELECT provider_id,nickname FROM shikimori_links WHERE user_id=?').bind(s.user_id).first();
@@ -111,6 +113,9 @@ export async function route(req,env) {
  fail(404,'not_found');
 }
 export default {
- async fetch(req,env) {try{return await route(req,env);}catch(e){if(e instanceof HttpError)return json({error:e.message},e.status);if(String(e?.message).includes('UNIQUE constraint'))return json({error:'identity_or_username_already_in_use'},409);return json({error:'internal_error'},500);}},
- async scheduled(_event,env) {if(!env.DB)return;const t=now();await env.DB.batch(['sessions','oauth_states','desktop_grants','rate_limits'].map(table=>env.DB.prepare(`DELETE FROM ${table} WHERE expires<=?`).bind(t)));}
+ async fetch(req,env) {try{return await route(req,env);}catch(e){if(e instanceof HttpError)return json({error:e.message},e.status);if(/no such table: (friends|watch_invites)\b/.test(String(e?.message)))return json({error:'friends_unavailable'},503);if(String(e?.message).includes('UNIQUE constraint'))return json({error:'identity_or_username_already_in_use'},409);return json({error:'internal_error'},500);}},
+ async scheduled(_event,env) {if(!env.DB)return;const t=now();await env.DB.batch(['sessions','oauth_states','desktop_grants','rate_limits'].map(table=>env.DB.prepare(`DELETE FROM ${table} WHERE expires<=?`).bind(t)));
+  // An unapplied optional social migration must not stop auth/session cleanup.
+  try{await env.DB.prepare('DELETE FROM watch_invites WHERE expires<=?').bind(t).run();}catch(e){if(!/no such table: watch_invites\b/.test(String(e?.message)))throw e;}
+ }
 };

@@ -1,4 +1,5 @@
 <script>
+    import { Pages } from "../pages.js";
     import { localStorageWritable } from "@babichjacob/svelte-localstorage";
     import { DefaultResult, LoginResult, RegisterResult, RegisterVerifyResult } from "anixartjs";
     import MetaInfo from "../components/gui/MetaInfo.svelte";
@@ -121,14 +122,15 @@
 <MetaInfo subTitle={activeTab === "login" ? "Вход" : "Регистрация"} />
 <section class="auth-page" aria-label="Аккаунт Anixart">
     <div class="auth-intro">
+        <button class="back" onclick={() => window.updateViewportComponent(Pages.HOME, {typeReleases: 0})}>← Назад в AnixArtix</button>
         <div class="identity"><img src="./assets/icons/anixartix.png" alt="" width="44" height="44" /><span>AnixArtix</span></div>
-        <span class="eyebrow">ВАШЕ МЕСТО ДЛЯ АНИМЕ</span>
-        <h1>Ваши истории.<br />Всегда рядом.</h1>
+        <span class="eyebrow">ОТДЕЛЬНОЕ ПОДКЛЮЧЕНИЕ</span>
+        <h1>Подключите<br />Anixart.</h1>
         <p>Войдите в аккаунт Anixart, чтобы продолжить с вашей библиотекой, историей и друзьями.</p>
         <ul>
             <li><span aria-hidden="true">01</span><div><strong>Любимое в одном месте</strong><small>Списки просмотра и сохранённые тайтлы.</small></div></li>
             <li><span aria-hidden="true">02</span><div><strong>Продолжайте свою историю</strong><small>История просмотра вашего аккаунта.</small></div></li>
-            <li><span aria-hidden="true">03</span><div><strong>Не смотрите в одиночку</strong><small>Друзья и совместный просмотр в плеере.</small></div></li>
+            <li><span aria-hidden="true">03</span><div><strong>Не смотрите в одиночку</strong><small>Друзья вашего аккаунта Anixart.</small></div></li>
         </ul>
         <div class="disclaimer">Неофициальный клиент Anixart. Для входа используется ваш аккаунт сервиса.</div>
     </div>

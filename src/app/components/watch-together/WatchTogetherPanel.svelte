@@ -1,10 +1,13 @@
 <script>
-    import { onDestroy } from 'svelte';
+    import { onDestroy, onMount } from 'svelte';
+    import { accountState } from '../../platform/account-state.js';
+    import { friendsApi, friendsError, DEFAULT_WATCH_SERVER } from '../../platform/friends.js';
     import { WatchTogetherClient } from '../../../shared/watch-together/client.mjs';
     import { createMediaFollower, mediaIdentityKey } from './player-media.js';
     import { attachMediaSync } from '../../../shared/watch-together/media-sync.mjs';
 
     export let video = null;
+    export let acceptedInvite = null;
     export let media = null;
     export let mediaLabel = '';
     export let loadMedia = async () => {};
@@ -14,8 +17,14 @@
 
     let expanded = false;
     let tab = 'create';
-    let serverUrl = '';
+    const serverUrl = DEFAULT_WATCH_SERVER;
     let name = '';
+    let friends = [], recipientId = '', sending = false, friendsLoading = false;
+    let identity = $accountState?.profile?.id, alive = true;
+    $: name = $accountState?.profile?.displayName || $accountState?.profile?.username || '';
+    $: if (identity !== $accountState?.profile?.id) {
+        identity = $accountState?.profile?.id; friends = []; recipientId = ''; leave();
+    }
     let invitationText = '';
     let copiedInvitation = '';
     let notice = '';
@@ -66,6 +75,34 @@
         if (media && !sourceLoading) sync?.refresh();
     }
 
+    onMount(() => {
+        if (acceptedInvite && name) {
+            expanded = true;
+            try {
+                if (acceptedInvite.serverUrl !== DEFAULT_WATCH_SERVER) throw new Error('Invalid server');
+                client.join({ ...acceptedInvite, name });
+            } catch { localError = 'Приглашение недействительно.'; }
+            acceptedInvite = null;
+        }
+    });
+
+    async function loadFriends() {
+        if (friendsLoading) return;
+        friendsLoading = true; const own = identity;
+        try { const result = await friendsApi.list(); if (alive && own === identity) friends = result.friends; }
+        catch (e) { if (alive && own === identity) localError = friendsError(e); }
+        finally { friendsLoading = false; }
+    }
+    async function inviteFriend() {
+        if (sending || !recipientId || view.role !== 'host' || view.status !== 'connected') return;
+        sending = true; localError = ''; const own = identity;
+        try {
+            await friendsApi.invite(recipientId, view.roomId, client.memberToken);
+            if (alive && own === identity) notice = 'Приглашение отправлено. Друг сможет принять его в приложении в течение 5 минут.';
+        } catch (e) { if (alive && own === identity) localError = friendsError(e); }
+        finally { sending = false; }
+    }
+
     function attach(element) {
         sync?.destroy();
         attachedVideo = element;
@@ -91,7 +128,7 @@
     async function connect() {
         localError = '';
         notice = '';
-        if (!name.trim()) { localError = 'Введите имя для комнаты.'; return; }
+        if (!name.trim() || !identity) { localError = 'Войдите в аккаунт AnixArtix.'; return; }
         if (tab === 'create' && !compatible) { localError = 'Сначала загрузите онлайн-серию с выбранной озвучкой.'; return; }
         try {
             if (tab === 'create') await client.create({ serverUrl: serverUrl.trim(), name: name.trim(), media });
@@ -144,6 +181,7 @@
     }
 
     onDestroy(() => {
+        alive = false;
         follower.destroy();
         sync?.destroy();
         unsubscribe();
@@ -153,7 +191,7 @@
 </script>
 
 <div class="together-widget" class:expanded>
-    <button class="room-toggle" class:connected={view.status === 'connected'} onclick={() => expanded = !expanded} aria-expanded={expanded} aria-controls="together-panel">
+    <button class="room-toggle" class:connected={view.status === 'connected'} onclick={() => { expanded = !expanded; if (expanded && identity) loadFriends(); }} aria-expanded={expanded} aria-controls="together-panel">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm8-1a3 3 0 1 0 0-6M2 21v-2a6 6 0 0 1 12 0v2m2-6a5 5 0 0 1 6 5v1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
         <span>{statusLabel}</span>
         {#if active}<span class="member-count">{view.members?.filter((member) => member.online).length || 1}</span>{/if}
@@ -165,10 +203,9 @@
             {#if !active}
                 <div class="tabs" role="group" aria-label="Действие"><button class:selected={tab === 'create'} onclick={() => tab = 'create'} disabled={busy}>Создать</button><button class:selected={tab === 'join'} onclick={() => tab = 'join'} disabled={busy}>Присоединиться</button></div>
                 <form onsubmit={(event) => { event.preventDefault(); connect(); }}>
-                    <label>Ваше имя<input bind:value={name} maxlength="32" autocomplete="off" placeholder="Как вас зовут?" disabled={busy} required /></label>
+                    <p class="hint">Ваше имя: {name || "Войдите в AnixArtix"}</p>
                     {#if tab === 'create'}
-                        <label>Сервер синхронизации<input bind:value={serverUrl} type="url" placeholder="wss://your-server.example/watch" autocomplete="off" spellcheck="false" disabled={busy} required /></label>
-                        <p class="hint">Сервер получает имя, IP-адрес и состояние просмотра, но не аккаунт или видео. Нужен запущенный сервер из папки server проекта. На разных компьютерах localhost не подойдёт: используйте общий адрес wss://.</p>
+                        <p class="hint">Комната подключается автоматически. Сервер получает имя и состояние просмотра, но не видео.</p>
                         <div class="media-preview"><span>Сейчас в плеере</span><strong>{mediaLabel || 'Загрузите серию'}</strong></div>
                         {#if unavailable}<p class="warning">Совместный просмотр локальных файлов пока недоступен.</p>
                         {:else if !sourceLoading && !media}<p class="warning">Каталог не вернул полные идентификаторы источника и озвучки. Выберите другой источник, чтобы не синхронизировать разные версии серии.</p>{/if}
@@ -176,7 +213,7 @@
                         <label>Приглашение друга<textarea bind:value={invitationText} rows="3" maxlength="4096" placeholder="Вставьте полное приглашение" autocomplete="off" spellcheck="false" disabled={busy} required></textarea></label>
                         <p class="hint">При подключении сервер получит ваше имя, IP-адрес и состояние просмотра. Аккаунт и адрес видео не передаются. Принимайте приглашения только от друзей.</p>
                     {/if}
-                    <button class="primary" type="submit" disabled={busy || (tab === 'create' && !compatible)}>{busy ? 'Подключаемся…' : tab === 'create' ? 'Создать комнату' : 'Войти в комнату'}</button>
+                    <button class="primary" type="submit" disabled={busy || !identity || (tab === 'create' && !compatible)}>{busy ? 'Подключаемся…' : tab === 'create' ? 'Создать комнату' : 'Войти в комнату'}</button>
                 </form>
                 {#if busy}<button class="secondary" onclick={leave}>Отменить подключение</button>{/if}
             {:else}
@@ -189,7 +226,13 @@
                 {#if view.snapshot?.buffering}<p class="hint">Ведущий загружает видео. Синхронизация продолжится после буферизации.</p>{/if}
                 {#if view.snapshot?.hostOnline === false}<p class="warning">Ведущий потерял соединение. Воспроизведение приостановлено.</p>{/if}
                 {#if autoplayBlocked}<button class="primary" onclick={unlockPlayback}>Разрешить воспроизведение</button>{/if}
-                <div class="actions">{#if view.role === 'host'}<button class="primary" onclick={copyInvitation}>Пригласить друга</button>{:else}<button class="secondary" onclick={resync} disabled={busy}>Синхронизировать</button>{/if}<button class="secondary" onclick={leave}>{view.role === 'host' ? 'Закрыть комнату' : 'Выйти'}</button></div>
+                {#if view.role === 'host'}
+                    <label>Пригласить друга AnixArtix<select bind:value={recipientId} disabled={sending}><option value="">Выберите друга</option>{#each friends as friend (friend.id)}<option value={friend.id}>{friend.displayName || friend.username} (@{friend.username})</option>{/each}</select></label>
+                    <button class="primary" disabled={sending || !recipientId || view.status !== 'connected'} onclick={inviteFriend}>{sending ? 'Отправляем…' : 'Отправить приглашение'}</button>
+                    <button class="secondary" disabled={friendsLoading} onclick={loadFriends}>Обновить друзей</button>
+                    {#if !friends.length}<p class="hint">Добавьте друга по нику в разделе «Друзья AnixArtix».</p>{/if}
+                {/if}
+                <div class="actions">{#if view.role === 'host'}<button class="secondary" onclick={copyInvitation}>Копировать ссылку</button>{:else}<button class="secondary" onclick={resync} disabled={busy}>Синхронизировать</button>{/if}<button class="secondary" onclick={leave}>{view.role === 'host' ? 'Закрыть комнату' : 'Выйти'}</button></div>
                 {#if copiedInvitation}<label>Личное приглашение<textarea readonly value={copiedInvitation} rows="3" onclick={(event) => event.currentTarget.select()}></textarea></label>{/if}
                 <p class="hint">При выходе из плеера соединение закрывается. Приглашение даёт доступ к комнате: не публикуйте его.</p>
             {/if}
@@ -201,7 +244,7 @@
 
 <style>
     .together-widget{position:absolute;right:24px;top:20px;z-index:25;color:#eeeef6;font-family:inherit;max-width:calc(100% - 48px)}
-    button,input,textarea{font:inherit}button{cursor:pointer}button:disabled{opacity:.45;cursor:not-allowed}button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #b6a0ff;outline-offset:3px}
+    select{background:#171821;color:#eee;padding:10px;border:1px solid #ffffff25;border-radius:9px;margin-bottom:10px}button,input,textarea{font:inherit}button{cursor:pointer}button:disabled{opacity:.45;cursor:not-allowed}button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #b6a0ff;outline-offset:3px}
     .room-toggle{display:flex;gap:9px;align-items:center;border:1px solid #ffffff24;border-radius:12px;padding:10px 14px;background:#171821e8;color:#eeeef6;font-size:13px;backdrop-filter:blur(16px)}.room-toggle.connected{border-color:#a58aff70}.member-count{border-radius:6px;background:#a58aff25;padding:1px 6px;color:#c4b1ff}
     .room-panel{width:360px;max-width:100%;box-sizing:border-box;margin-top:10px;background:#171821f5;border:1px solid #ffffff17;border-radius:18px;padding:22px;box-shadow:0 20px 70px #0008;max-height:calc(100vh - 150px);overflow:auto;backdrop-filter:blur(24px)}header{display:flex;justify-content:space-between;align-items:center;gap:12px}.eyebrow{font-size:10px;letter-spacing:1.8px;color:#b59cff;font-weight:700}h2{font-size:21px;margin:5px 0 0;font-weight:650;letter-spacing:-.5px}.icon-button{border:0;background:transparent;color:#9c9baa;font-size:26px;padding:0 4px}.intro{font-size:12px;line-height:1.65;color:#aaa9b9;margin:15px 0 18px}
     .tabs{display:flex;background:#0e0f16;border-radius:10px;padding:4px;margin-bottom:16px}.tabs button{flex:1;border:0;background:transparent;color:#9998aa;border-radius:7px;font-size:12px;padding:9px}.tabs button.selected{background:#2e293e;color:#ded3ff}form{display:flex;flex-direction:column;gap:13px}label{display:flex;flex-direction:column;gap:7px;font-size:12px;color:#c7c6d2}input,textarea{width:100%;box-sizing:border-box;color:#eeedf6;background:#0f1018;border:1px solid #ffffff18;border-radius:9px;padding:10px;font-size:12px;resize:vertical}textarea{word-break:break-all}.hint{font-size:11px;line-height:1.65;color:#9695a8;margin:8px 0}.media-preview{border-left:2px solid #a58aff;padding:4px 0 4px 12px;display:flex;flex-direction:column;gap:4px}.media-preview span{font-size:10px;color:#9695a8}.media-preview strong{font-size:12px;font-weight:500;line-height:1.5}

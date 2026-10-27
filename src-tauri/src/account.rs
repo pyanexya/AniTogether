@@ -1,4 +1,5 @@
-//! Independent AnixArtix identity. Never shares Anixart credentials or room URLs.
+pub mod social;
+// Independent AnixArtix identity. Never shares Anixart credentials or room URLs.
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -94,6 +95,8 @@ pub struct Account {
     #[cfg(test)]
     gate: Mutex<Option<std::sync::Arc<tokio::sync::Notify>>>,
     #[cfg(test)]
+    requests: Mutex<Vec<(String, String, Option<Value>, bool)>>,
+    #[cfg(test)]
     late_revocations: std::sync::atomic::AtomicUsize,
 }
 #[derive(Serialize)]
@@ -164,6 +167,8 @@ impl Account {
             #[cfg(test)]
             gate: Mutex::new(None),
             #[cfg(test)]
+            requests: Mutex::new(Vec::new()),
+            #[cfg(test)]
             late_revocations: std::sync::atomic::AtomicUsize::new(0),
         })
     }
@@ -173,10 +178,29 @@ impl Account {
         body: Option<Value>,
         token: Option<&str>,
     ) -> Result<(u16, Value), String> {
-        // Routes are private constants from methods below, never IPC input.
+        let method = if body.is_some() {
+            reqwest::Method::POST
+        } else {
+            reqwest::Method::GET
+        };
+        self.request_method(method, path, body, token).await
+    }
+    async fn request_method(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<Value>,
+        token: Option<&str>,
+    ) -> Result<(u16, Value), String> {
+        // Paths are fixed routes plus validated identifiers, never arbitrary IPC URLs.
         #[cfg(test)]
         {
-            let _ = (path, body, token);
+            self.requests.lock().unwrap().push((
+                method.to_string(),
+                path.into(),
+                body,
+                token.is_some(),
+            ));
             let gate = self.gate.lock().unwrap().clone();
             if let Some(gate) = gate {
                 gate.notified().await;
@@ -190,11 +214,7 @@ impl Account {
         }
         #[cfg(not(test))]
         {
-            let mut request = if body.is_some() {
-                self.client.post(format!("{ISSUER}{path}"))
-            } else {
-                self.client.get(format!("{ISSUER}{path}"))
-            };
+            let mut request = self.client.request(method, format!("{ISSUER}{path}"));
             if let Some(body) = body {
                 request = request.json(&body);
             }
@@ -408,7 +428,7 @@ impl Account {
         }
         // Project explicitly; CSRF and provider credentials never cross IPC.
         Ok(
-            json!({"status":"authenticated","profile":public_fields(&value["profile"], &["id", "username", "displayName", "bio", "avatar"]),"identities":value["identities"].as_array().map(|items| items.iter().filter(|v| v.as_str()==Some("google")||v.as_str()==Some("discord")).cloned().collect::<Vec<_>>()).unwrap_or_default(),"shikimori":if value["shikimori"].is_null(){Value::Null}else{public_fields(&value["shikimori"], &["id", "nickname"])},"warning":warning}),
+            json!({"status":"authenticated","profile":public_fields(&value["profile"], &["id", "username", "displayName", "bio", "avatar", "avatarUrl"]),"identities":value["identities"].as_array().map(|items| items.iter().filter(|v| v.as_str()==Some("google")||v.as_str()==Some("discord")).cloned().collect::<Vec<_>>()).unwrap_or_default(),"shikimori":if value["shikimori"].is_null(){Value::Null}else{public_fields(&value["shikimori"], &["id", "nickname"])},"warning":warning}),
         )
     }
     fn cancel_session(&self, generation: u64) -> bool {
@@ -739,12 +759,13 @@ mod tests {
         reply(
             &a,
             200,
-            json!({"csrfToken":"csrf_secret","accessToken":"secret_bearer","profile":{"id":"id","username":"user","token":"secret_bearer"},"shikimori":{"id":123,"nickname":"name","accessToken":"provider_secret"},"identities":["google","unknown"]}),
+            json!({"csrfToken":"csrf_secret","accessToken":"secret_bearer","profile":{"id":"id","username":"user","avatarUrl":"/api/avatars/id?v=123","token":"secret_bearer"},"shikimori":{"id":123,"nickname":"name","accessToken":"provider_secret"},"identities":["google","unknown"]}),
         );
         let v = a.status().await.unwrap();
         let text = v.to_string();
         assert!(!text.contains("secret"));
         assert_eq!(v["profile"]["username"], "user");
+        assert_eq!(v["profile"]["avatarUrl"], "/api/avatars/id?v=123");
         assert_eq!(v["identities"], json!(["google"]));
     }
     #[tokio::test]
@@ -818,5 +839,154 @@ mod tests {
         gate.notify_one();
         assert!(task.await.unwrap().is_err());
         assert!(a.state.lock().unwrap().session.is_some());
+    }
+    async fn signed_in() -> Account {
+        let (a, _) = account(false);
+        let p = start(&a, false).await;
+        due(&a);
+        exchange(&a);
+        a.poll(&p.attempt_id).await.unwrap();
+        a
+    }
+    #[tokio::test]
+    async fn social_requires_own_session() {
+        let (a, _) = account(false);
+        assert!(a.friends_list().await.is_err());
+        assert!(a.watch_invites_list().await.is_err());
+    }
+    #[tokio::test]
+    async fn social_projection_strips_nested_credentials_and_capabilities() {
+        let a = signed_in().await;
+        let profile = json!({"id":"id","username":"user","accessToken":"secret"});
+        reply(
+            &a,
+            200,
+            json!({"friends":[profile],"incoming":[{"id":"request","createdAt":1,"profile":profile,"hostToken":"secret"}],"outgoing":[],"csrfToken":"secret"}),
+        );
+        assert!(!serde_json::to_string(&a.friends_list().await.unwrap())
+            .unwrap()
+            .contains("secret"));
+        reply(
+            &a,
+            200,
+            json!({"invites":[{"id":"invite","sender":profile,"createdAt":1,"expiresAt":2,"inviteToken":"secret","roomId":"secret"}]}),
+        );
+        assert!(
+            !serde_json::to_string(&a.watch_invites_list().await.unwrap())
+                .unwrap()
+                .contains("secret")
+        );
+    }
+    #[tokio::test]
+    async fn social_rejects_path_injection_before_transport() {
+        let a = signed_in().await;
+        for id in ["../auth/logout", "id?token=secret", "https://evil.test", ""] {
+            assert!(a.friends_request(id).await.is_err());
+            assert!(a.friends_remove(id).await.is_err());
+            assert!(a.friends_accept(id).await.is_err());
+            assert!(a.watch_invite_accept(id).await.is_err());
+        }
+        for name in ["ab", "user&other=1", "user/name", "a-b"] {
+            assert!(a.friends_lookup(name).await.is_err());
+        }
+        assert!(a
+            .watch_invite_send("user", "bad-room", "token")
+            .await
+            .is_err());
+    }
+    #[tokio::test]
+    async fn accepted_invite_has_fixed_relay_and_valid_capability() {
+        let a = signed_in().await;
+        for server in [
+            "wss://evil.test/watch",
+            "ws://aniartix.pyanexy.cc/watch",
+            "wss://aniartix.pyanexy.cc/watch?token=secret",
+        ] {
+            reply(
+                &a,
+                200,
+                json!({"serverUrl":server,"roomId":"a".repeat(12),"inviteToken":"b".repeat(48)}),
+            );
+            assert!(a.watch_invite_accept(&"A".repeat(43)).await.is_err());
+        }
+        reply(
+            &a,
+            200,
+            json!({"serverUrl":"wss://aniartix.pyanexy.cc/watch","roomId":"a".repeat(12),"inviteToken":"b".repeat(48),"accessToken":"secret"}),
+        );
+        let v =
+            serde_json::to_value(a.watch_invite_accept(&"A".repeat(43)).await.unwrap()).unwrap();
+        assert_eq!(v["inviteToken"], "b".repeat(48));
+        assert!(!v.to_string().contains("secret"));
+    }
+    #[tokio::test]
+    async fn social_401_expires_only_current_session() {
+        let a = signed_in().await;
+        reply(&a, 401, json!({"error":"secret"}));
+        assert!(a.friends_list().await.is_err());
+        assert!(a.state.lock().unwrap().session.is_none());
+    }
+    #[tokio::test]
+    async fn stale_social_response_cannot_leak_or_expire_new_session() {
+        for status in [200, 401] {
+            let a = Arc::new(signed_in().await);
+            reply(
+                &a,
+                status,
+                json!({"friends":[],"incoming":[],"outgoing":[]}),
+            );
+            let gate = Arc::new(tokio::sync::Notify::new());
+            *a.gate.lock().unwrap() = Some(gate.clone());
+            let task = {
+                let a = a.clone();
+                tokio::spawn(async move { a.friends_list().await })
+            };
+            tokio::task::yield_now().await;
+            a.state.lock().unwrap().generation += 1;
+            gate.notify_one();
+            assert!(task.await.unwrap().is_err());
+            assert!(a.state.lock().unwrap().session.is_some());
+        }
+    }
+    #[tokio::test]
+    async fn social_routes_use_expected_verbs_and_native_auth() {
+        let a = signed_in().await;
+        a.requests.lock().unwrap().clear();
+        reply(&a, 200, json!({"ok":true}));
+        a.friends_remove("user").await.unwrap();
+        reply(&a, 200, json!({"profile":{"id":"user","username":"alice"}}));
+        a.friends_lookup("alice").await.unwrap();
+        reply(&a, 201, json!({"id":"request"}));
+        a.friends_request("user").await.unwrap();
+        reply(&a, 201, json!({"id":"invite","expiresAt":123}));
+        a.watch_invite_send("user", &"a".repeat(12), &"b".repeat(48))
+            .await
+            .unwrap();
+        let calls = a.requests.lock().unwrap();
+        assert_eq!(
+            calls[0],
+            ("DELETE".into(), "/api/friends/user".into(), None, true)
+        );
+        assert_eq!(
+            calls[1],
+            (
+                "GET".into(),
+                "/api/friends/lookup?username=alice".into(),
+                None,
+                true
+            )
+        );
+        assert_eq!(
+            calls[2],
+            (
+                "POST".into(),
+                "/api/friends/requests".into(),
+                Some(json!({"userId":"user"})),
+                true
+            )
+        );
+        assert_eq!(calls[3].0, "POST");
+        assert_eq!(calls[3].1, "/api/watch-invites");
+        assert!(calls[3].3);
     }
 }

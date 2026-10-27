@@ -22,6 +22,14 @@ jobs:
       - name: Test animated setup shell (harmless fixture)
         shell: powershell
         run: ./installer/test.ps1
+      - name: Upload installer visual evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: AnixArtix-Installer-Preview
+          path: dist/installer-preview/*
+          if-no-files-found: warn
+          retention-days: 14
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
@@ -39,6 +47,18 @@ jobs:
         run: cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --lib --locked
       - name: Build Windows installer
         run: npm run make:windows
+      - name: Capture actual native startup window (no login)
+        shell: powershell
+        timeout-minutes: 2
+        run: ./installer/native-preview.ps1
+      - name: Upload native startup visual evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: AnixArtix-Native-Preview
+          path: dist/native-preview/*
+          if-no-files-found: warn
+          retention-days: 14
       - name: Package animated setup
         shell: powershell
         run: ./installer/build.ps1

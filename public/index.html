@@ -9,12 +9,25 @@
     <meta name="theme-color" content="#101116" />
     <meta name="description" content="AnixArtix — неофициальный клиент Anixart для вашей аниме-библиотеки и совместного просмотра." />
     <link rel="icon" type="image/png" href="/assets/icons/anixartix.png" />
+    <style>
+        #startup-status { position: fixed; inset: 0; z-index: 99998; display: grid; place-content: center; padding: 32px; box-sizing: border-box; background: #101116; color: #eeedf6; font: 16px/1.6 system-ui, sans-serif; text-align: center; }
+        #startup-status h1 { margin: 0; font-size: 28px; }
+        #startup-status p { max-width: 520px; color: #a2a2b4; }
+        #startup-retry { padding: 12px 20px; border: 1px solid #ff7884; border-radius: 10px; background: #252632; color: #eeedf6; cursor: pointer; }
+        #startup-retry[hidden] { display: none; }
+    </style>
+    <script defer src="/startup.js"></script>
     <link rel='stylesheet' href='/build/bundle.css'>
     <script type="module" src='/build/bundle.js'></script>
     <script src="/assets/js/hls.js"></script>
 </head>
 
 <body>
+    <section id="startup-status" role="status" aria-live="polite">
+        <h1>AnixArtix</h1>
+        <p id="startup-message">Запускаем клиент…</p>
+        <button id="startup-retry" hidden>Повторить запуск</button>
+    </section>
 </body>
 
 </html>

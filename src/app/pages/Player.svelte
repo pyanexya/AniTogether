@@ -3,6 +3,8 @@
 <script>
     import { Pages } from "../pages.js";
     export let args;
+    const acceptedWatchInvite = args?.acceptedWatchInvite;
+    if (args) delete args.acceptedWatchInvite;
     import { localStorageWritable } from "@babichjacob/svelte-localstorage";
     import { onDestroy, onMount } from "svelte";
     import { createNativeMediaSession, classifiedIsHls, providerReferer } from "../components/watch-together/native-media.js";
@@ -90,14 +92,17 @@
     let reloadHintTimeout = null;
     let playerDestroyed = false;
     let sourceLoading = true;
-    let roomState = { status: 'idle', role: null };
+    let roomState = { status: acceptedWatchInvite ? 'connecting' : 'idle', role: acceptedWatchInvite ? 'guest' : null };
     let roomMediaRequest = 0;
     let roomMediaLoad = false;
     $: playbackLocked = roomState.role === 'guest' && !['idle', 'closed'].includes(roomState.status);
     $: sharedMedia = sourceLoading || args?.isOffline ? null : playerMediaIdentity(args?.release, currentEpisode || args?.currentEpisode, args?.episodes);
     $: sharedLabel = [args?.release?.title_ru, (currentEpisode || args?.currentEpisode)?.name, resolveEpisodeSource(currentEpisode || args?.currentEpisode, args?.episodes)?.type?.name].filter(Boolean).join(' · ');
 
+    let roomHasConnected = false;
     function receiveRoomState(state) {
+        if (state.status === 'connected') roomHasConnected = true;
+        if (acceptedWatchInvite && !roomHasConnected && !state.role && ['idle', 'connecting'].includes(state.status)) return;
         roomState = state;
         if (!state.role) { ++roomMediaRequest; if (roomMediaLoad) { ++activeEpisodeRequestId; nativeMedia.cancel(); } roomMediaLoad = false; }
     }
@@ -826,7 +831,7 @@
         // Start loading the stream immediately before non-critical UI awaits
         if (!args.src || args.src === "https:undefined" || args.src === "undefined") {
             if (currentEpisode) {
-                playVideo(currentEpisode);
+                playVideo(currentEpisode, Boolean(acceptedWatchInvite));
             }
         } else {
             {
@@ -1058,6 +1063,7 @@
     />
 
     <WatchTogetherPanel
+        acceptedInvite={acceptedWatchInvite}
         {video}
         media={sharedMedia}
         mediaLabel={sharedLabel}

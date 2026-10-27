@@ -29,7 +29,7 @@
     onMount(() => { refresh(); return () => { alive = false; flow.dispose(); }; });
 </script>
 <section class="account-page">
-    <span class="eyebrow">ОТДЕЛЬНЫЙ АККАУНТ</span>
+    <span class="eyebrow">АККАУНТ ANIXARTIX</span>
     <h2>Аккаунт AnixArtix</h2>
     <p>Профиль, вход через Google или Discord и привязка Shikimori. Это не аккаунт каталога Anixart: его авторизация не изменяется. Комнаты по приглашению по-прежнему доступны без входа.</p>
     {#if loading}<p role="status">Проверяем сессию…</p>{/if}
@@ -66,7 +66,7 @@
     {#if error}<p class="notice" role="alert">{error}</p><button disabled={busy} onclick={refresh}>Повторить проверку</button>{/if}
 </section>
 <style>
-    .account-page { padding: 48px 36px; max-width: 720px; color: var(--main-text-color); }
+    .account-page { padding: 32px clamp(16px, 3vw, 36px); max-width: 720px; min-width: 0; box-sizing: border-box; overflow-wrap: anywhere; color: var(--main-text-color); }
     .eyebrow { font-size: 11px; letter-spacing: .14em; color: var(--secondary-text-color); }
     h2 { margin: 12px 0; } h3 { margin: 0; }
     p, small { line-height: 1.6; color: var(--secondary-text-color); }

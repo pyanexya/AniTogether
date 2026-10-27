@@ -11,14 +11,21 @@
     import SettingsAccount from "../settings-pages/SettingsAccount.svelte";
     import SettingsApp from "../settings-pages/SettingsApp.svelte";
 
+    import { runtimeVersionLabels } from "../platform/runtime-info.js";
+
+    const runtimeLabels = runtimeVersionLabels(window.versions);
     const user_token = localStorageWritable("user_token", null);
 
     const views = [SettingsProfile, SettingsApp, SettingsPlayer, SettingsPlaying, SettingsUpscale, SettingsAbout];
 
+    export let args = null;
+
     let viewInfo = {
-        page: SettingsProfile,
+        page: SettingsAccount,
         args: null
     }
+
+    $: if (args?.section === 'account') viewInfo = { page: SettingsAccount, args: null };
 
     function setPage(page, args) {
         viewInfo.page = page;
@@ -31,7 +38,7 @@
     <div class="settings-left-menu flex-column">
         <span class="settings-title">Основное</span>
         <button class="settings-category flex-row" class:selected-category={viewInfo.page == SettingsAccount} onclick={() => setPage(SettingsAccount, null)}>Аккаунт AnixArtix</button>
-        <button class="settings-category flex-row" class:selected-category={viewInfo.page == views[0]} onclick={() => setPage(views[0], null)}>Настройки пользователя</button>
+        <button class="settings-category flex-row" class:selected-category={viewInfo.page == views[0]} onclick={() => setPage(views[0], null)}>Профиль каталога Anixart</button>
         <button class="settings-category flex-row" class:selected-category={viewInfo.page == views[1]} onclick={() => setPage(views[1], null)}>Настройки приложения</button>
         <Separator marginRight={22}/>
         <span class="settings-title">Воспроизведение</span>
@@ -44,13 +51,12 @@
         <button class="settings-category flex-row" disabled={!anixApi.client.token} class:disabled={!anixApi.client.token} onclick={() => {
             user_token.set(null);
             location.reload();
-        }}>Выйти</button>
+        }}>Выйти из Anixart</button>
         <Separator marginRight={22}/>
         <div class="build-info flex-column">
-            <span class="third-text">AnixArtix v{window.versions.anidesk}</span>
-            <span class="third-text">NodeJS v{window.versions.node}</span>
-            <span class="third-text">Electron v{window.versions.electron}</span>
-            <span class="third-text">Chrome v{window.versions.chrome}</span>
+            {#each runtimeLabels as label}
+                <span class="third-text">{label}</span>
+            {/each}
         </div>
         <div class="links-info flex-row">
             <button onclick={() => winApi.openLink(`https://github.com/pyanexya/AniTogether`)}>
@@ -70,13 +76,13 @@
         color: var(--third-text-color);
         font-size: 11px;
         font-weight: 400;
-        width: 210px;
+        max-width: 100%;
     }
 
     .links-info {
         margin-top: 10px;
         margin-right: 22px;
-        width: 195px;
+        width: 100%;
     }
 
     .build-info {
@@ -84,14 +90,19 @@
     }
 
     .settings {
-        justify-content: space-evenly;
+        width: 100%;
+        min-width: 0;
+        min-height: 0;
         height: 100%;
         overflow: hidden;
     }
 
     .settings-page {
-        width: 80%;
-        overflow-y: auto;
+        flex: 1 1 0;
+        min-width: 0;
+        min-height: 0;
+        overflow: auto;
+        overflow-wrap: anywhere;
         padding-bottom: 20px;
     }
 
@@ -105,36 +116,43 @@
         font-weight: 500;
         color: var(--secondary-text-color);
         padding-left: 15px;
-        width: 210px;
+        max-width: 100%;
         margin-bottom: 10px;
     }
 
     .settings-left-menu {
-        width: 20%;
-        min-width: 220px;
+        flex: 0 0 210px;
+        min-width: 0;
+        box-sizing: border-box;
         background-color: var(--alt-background-color);
-        align-items: flex-end;
+        align-items: stretch;
         overflow-y: auto;
-        padding-top: 60px;
-        padding-bottom: 60px;
+        padding: 28px 10px;
     }
 
     .settings-category {
         margin-top: 2px;
-        height: 30px;
-        width: 220px;
+        min-height: 34px;
+        width: 100%;
+        box-sizing: border-box;
+        text-align: left;
         justify-content: flex-start;
         align-items: center;
-        padding-left: 15px;
-        margin-right: 10px;
+        padding: 7px 8px;
+        margin-right: 0;
         border-radius: 10px;
         color: var(--secondary-text-color);
-        min-height: 30px;
+        flex-shrink: 0;
         transition: background-color 0.2s ease-in-out;
     }
 
     .settings-category:hover {
         background-color: var(--select-button-color);
         color: var(--main-text-color);
+    }
+    @media (max-width: 760px) {
+        .settings { flex-direction: column; overflow-y: auto; }
+        .settings-left-menu { flex: 0 0 auto; padding: 16px; overflow: visible; }
+        .settings-page { flex: 1 0 auto; overflow: visible; }
     }
 </style>

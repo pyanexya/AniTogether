@@ -30,7 +30,7 @@ $licensePath = (Resolve-Path -LiteralPath (Join-Path $root 'LICENSE')).Path
 $noticePath = (Resolve-Path -LiteralPath (Join-Path $root 'FORK-NOTICE.md')).Path
 try {
     $compilerArguments = @(
-        '/nologo', '/target:winexe', '/platform:x64', '/optimize+', '/warnaserror+', '/utf8output',
+        '/nologo', '/target:winexe', '/platform:x64', '/optimize+', '/warnaserror+', '/utf8output', '/codepage:65001',
         "/out:$output", "/win32manifest:$manifestPath", "/win32icon:$iconPath",
         '/reference:System.dll', '/reference:System.Core.dll', '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll',
         "/resource:$Payload,payload.exe", "/resource:$hashFile,payload.sha256",

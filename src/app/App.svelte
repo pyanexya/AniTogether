@@ -14,6 +14,21 @@
     import { onMount, onDestroy } from "svelte";
     import DebugConsole from "./components/gui/DebugConsole.svelte";
 
+    import AccountLogin from "./pages/AccountLogin.svelte";
+    import FriendsAnixArtix from "./pages/FriendsAnixArtix.svelte";
+    import FriendsInviteInbox from "./components/FriendsInviteInbox.svelte";
+    import { accountState } from "./platform/account-state.js";
+    let guestMode = false;
+    let wasAuthenticated = false;
+    $: if ($accountState?.status === 'authenticated') {
+        wasAuthenticated = true;
+        guestMode = false;
+    } else if (wasAuthenticated && $accountState) {
+        wasAuthenticated = false;
+        guestMode = false;
+    }
+    $: showAccountEntry = !guestMode && $accountState?.status !== 'authenticated';
+
     window.utils = Utils;
 
     let guiSettings, endpointUrl;
@@ -419,7 +434,7 @@
         intervalBookmarkCheck = setInterval(checkBookmarkNewEpisodes, 300000); // каждые 5 минут
 
         intervalNotifications = setInterval(() => {
-            if (window.anixApi?.notification) {
+            if (utoken?.token && window.anixApi?.notification) {
                 anixApi.notification
                     .countNotifications()
                     .then((x) => notificationCount.set(x.count))
@@ -464,7 +479,12 @@
         <TitleBar />
     {/if}
     <div class="main-content" class:fullscreen={isFullscreen}>
+        {#if showAccountEntry}
+            <AccountLogin onContinue={() => guestMode = true} />
+        {:else}
+        {#if $accountState?.status === "authenticated"}<FriendsInviteInbox />{/if}
         <LeftMenu
+            onAccountLogin={() => guestMode = false}
             bind:viewportComponent={viewInfo.viewportComponent}
             bind:views
             bind:argsComponent={viewInfo.args}
@@ -479,11 +499,21 @@
                 on:scroll={scrollEvent}
                 in:fade={{ duration: 200 }}
             >
+                {#if !utoken?.token && viewInfo.viewportComponent !== FriendsAnixArtix && ![Pages.SETTINGS, Pages.LOGIN, Pages.OFFLINE, Pages.OFFLINE_RELEASE].some(page => views?.[page] === viewInfo.viewportComponent)}
+                    <section class="connection-prompt">
+                        <span class="connection-label">АККАУНТ ANIXARTIX · {$accountState?.status === 'authenticated' ? 'ВХОД ВЫПОЛНЕН' : 'ГОСТЕВОЙ РЕЖИМ'}</span>
+                        <h1>Подключите свою библиотеку</h1>
+                        <p>Anixart пока не подключён. Для каталога, просмотра, списков и истории нужен отдельный аккаунт Anixart.</p>
+                        <button on:click={() => window.updateViewportComponent(Pages.LOGIN)}>Подключить Anixart →</button>
+                        <small>Ваш аккаунт AnixArtix уже доступен в меню слева. Это два разных сервиса.</small>
+                    </section>
+                {:else}
                 <svelte:component
                     this={viewInfo.viewportComponent}
                     args={viewInfo.args}
                 ></svelte:component>
-                {#if firstRun}
+                {/if}
+                {#if firstRun && utoken?.token}
                     <BaseModal
                         modalComponent={FirstRunModal}
                         canCloseOnBackground={false}
@@ -494,6 +524,7 @@
                 {/if}
             </div>
         {/key}
+        {/if}
     </div>
     {#if isDebug}
         <DebugConsole />
@@ -501,6 +532,13 @@
 </main>
 
 <style>
+    .connection-prompt { max-width:620px; margin:clamp(40px,10vh,100px) auto; padding:36px; }
+    .connection-label { color:var(--accent-color); font-size:10px; font-weight:700; letter-spacing:1.2px; }
+    .connection-prompt h1 { font-size:32px; letter-spacing:-1px; margin:18px 0; }
+    .connection-prompt p { color:var(--secondary-text-color); font-size:14px; line-height:1.8; }
+    .connection-prompt button { display:block; background:var(--accent-color); color:var(--accent-contrast); padding:14px 22px; border-radius:10px; margin:25px 0 20px; font-weight:650; }
+    .connection-prompt small { color:var(--third-text-color); font-size:11px; line-height:1.7; }
+
     .main-content {
         display: flex;
         flex-direction: row;

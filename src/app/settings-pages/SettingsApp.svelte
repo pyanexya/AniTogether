@@ -295,6 +295,7 @@
     }
 
     .shiki-auth-block {
+        box-sizing: border-box;
         width: 75%;
         background-color: var(--alt-background-color);
         padding: 16px;
@@ -337,11 +338,14 @@
     }
 
     .code-input-row {
+        flex-wrap: wrap;
         gap: 10px;
         width: 100%;
     }
 
     .shiki-code-input {
+        min-width: 0;
+        box-sizing: border-box;
         flex: 1;
         background-color: var(--alt-gray-background-color);
         color: var(--main-text-color);

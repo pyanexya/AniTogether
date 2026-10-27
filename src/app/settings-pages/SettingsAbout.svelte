@@ -235,6 +235,8 @@
     }
 
     .developer {
+        flex-wrap: wrap;
+        gap: 12px;
         width: 100%;
         margin-bottom: 20px;
         margin-top: 10px;
@@ -262,6 +264,7 @@
     }
 
     .app-info {
+        min-width: 0;
         height: auto;
         justify-content: center;
         margin-left: 20px;
@@ -276,6 +279,8 @@
     }
 
     .update-card {
+        flex-wrap: wrap;
+        box-sizing: border-box;
         background-color: var(--alt-background-color);
         border-radius: 12px;
         padding: 16px 24px;

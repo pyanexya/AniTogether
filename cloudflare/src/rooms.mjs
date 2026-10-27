@@ -26,6 +26,14 @@ export class WatchRooms {
   async fetch(request) {
     return this.event(async () => {
       const url = new URL(request.url);
+      if (url.pathname === '/internal/friend-invite' && request.method === 'POST') {
+        let data; try { data = await request.json(); } catch { return new Response(null, {status:400}); }
+        const room = isRoomId(data?.roomId) && this.rooms.get(data.roomId);
+        const host = room?.members.find(m => m.role === 'host');
+        if (!host || !host.connection || !equal(host.token, data.hostToken)) return new Response(null, {status:404});
+        return Response.json({inviteToken:room.invite}, {headers:{'Cache-Control':'no-store'}});
+      }
+
       const allowed = new Set(['http://tauri.localhost', 'tauri://localhost', this.env.APP_ORIGIN || 'https://aniartix.pyanexy.cc']);
       if (url.pathname !== '/watch' || url.search || request.method !== 'GET' || !allowed.has(request.headers.get('Origin'))) return new Response('Forbidden', { status: 403 });
       if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') return new Response('WebSocket required', { status: 426 });

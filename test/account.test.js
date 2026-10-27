@@ -56,3 +56,33 @@ describe('independent native account boundary',()=>{
         expect(update.mock.calls.at(-1)[0]).toEqual({busy:false,pairing:null,error:'Нет связи'});expect(api.cancel).toHaveBeenCalled();
     });
 });
+
+describe('account entry lifecycle', () => {
+    it('publishes native restored status and logout without persisting a token', async () => {
+        const { accountState } = await import('../src/app/platform/account-state.js');
+        const updates = []; const unsubscribe = accountState.subscribe(value => updates.push(value));
+        const profile = { status: 'authenticated', profile: { id: 'one', displayName: 'One' } };
+        const api = createAccountApi(vi.fn().mockResolvedValueOnce(profile).mockResolvedValueOnce({ status: 'signedOut', revoked: true }));
+        await api.status(); await api.logout(); unsubscribe();
+        expect(updates.slice(-2)).toEqual([profile, { status: 'signedOut', revoked: true }]);
+    });
+    it('only resolves public avatars on the fixed issuer', async () => {
+        const { accountAvatar, accountSymbol } = await import('../src/app/platform/account-state.js');
+        expect(accountAvatar({ avatarUrl: '/api/avatars/alice?v=123' })).toBe('https://aniartix.pyanexy.cc/api/avatars/alice?v=123');
+        for (const avatarUrl of ['https://evil.test/x', '//evil.test/x', '/api/avatars/../me?v=1', '/api/avatars/a?v=1&token=secret']) expect(accountAvatar({avatarUrl})).toBeNull();
+        expect(accountSymbol({avatar: 'fox'})).toBe('🦊');
+        expect(accountSymbol({avatar: 'https://evil.test'})).toBe('◉');
+    });
+    it('expiry stays visible even if native cancel fails', async () => {
+        const { api, flow, update } = setup(); api.cancel.mockRejectedValue('Unavailable');
+        await flow.start(false); await vi.advanceTimersByTimeAsync(300000);
+        expect(update.mock.calls.at(-1)[0]).toMatchObject({busy:false,pairing:null,error:expect.stringContaining('истекло')});
+    });
+    it('a late failed poll cannot overwrite a newer attempt after cancellation', async () => {
+        const { api, flow, update } = setup(); const held = deferred();
+        api.poll.mockRejectedValueOnce('old failure'); api.cancel.mockReturnValueOnce(held.promise);
+        await flow.start(false); await vi.advanceTimersByTimeAsync(5000);
+        await flow.start(true); held.resolve(); await Promise.resolve(); await Promise.resolve();
+        expect(update.mock.calls.at(-1)[0]).toEqual({busy:true,pairing}); flow.dispose();
+    });
+});
