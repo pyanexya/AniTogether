@@ -25,7 +25,7 @@ recorded byte sizes, or the Worker suppresses the entire release.
    ```
 
 5. Review and commit only `cloudflare/public/downloads/release.json`; deploy portal.
-   GitHub asset URLs are confined to `MjKey/AniXFlow`, exact version tag/filenames.
+   GitHub asset URLs are confined to `pyanexya/AniTogether`, exact version tag/filenames.
    Do not overwrite published assets in place. Use a new version for a new build.
 
 ## Optional: Workers Static Assets
@@ -44,3 +44,9 @@ this is not a claim of unlimited free Worker requests.
 The manifest's release date is supplied explicitly (publication date), not inferred
 from file timestamps. Size and SHA-256 are always calculated from supplied bytes.
 Importing does not publish, sign, certify or execute the installer.
+
+The publication workflow checks out the successful **build commit** at the root
+for version and corresponding source, and separately checks out its own dispatched
+workflow commit at `release-tools/` for the importer. This allows release tooling
+to be added after a build without changing or mislabeling the build's source.
+The workflow only permits publication in `pyanexya/AniTogether`.
