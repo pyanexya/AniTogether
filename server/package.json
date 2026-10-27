@@ -1,0 +1,17 @@
+{
+  "name": "anixartix-relay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "GPL-2.0-only",
+  "scripts": {
+    "start": "node watch-together.mjs",
+    "test": "node --test relay.integration.test.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "ws": "8.22.0"
+  }
+}

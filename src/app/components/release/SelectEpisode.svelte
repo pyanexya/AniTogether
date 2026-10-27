@@ -263,6 +263,7 @@
             }
         } catch (e) {
             console.error("Failed to download episode:", e);
+            alert(`Не удалось скачать серию: ${e?.message || e}`);
         } finally {
             downloadingEpisodeId = null;
         }
@@ -343,6 +344,7 @@
                         downloadProgressStore.update(s => ({ ...s, [`${args.id}_${epPos}`]: 0 }));
                     } catch (e) {
                         console.error("Download episode error:", e);
+                        alert(`Не удалось скачать серию: ${e?.message || e}`);
                     }
                 }}
             >
@@ -451,24 +453,23 @@
                                 const posId = epItem.position || epItem.id;
                                 const matchOff = downloadedEps.find(e => e.id === posId);
                                 if (matchOff) {
-                                    const epHex = Array.from(new TextEncoder().encode(matchOff.filePath)).map(b => b.toString(16).padStart(2, '0')).join('');
                                     return {
                                         ...epItem,
-                                        url: `anixflow://${epHex}`,
+                                        url: `offline-file:${encodeURIComponent(matchOff.filePath)}`,
+                                        offlineFilePath: matchOff.filePath,
                                         isOffline: true
                                     };
                                 }
                                 return epItem;
                             });
-                            const hexPath = Array.from(new TextEncoder().encode(offlineEp.filePath)).map(b => b.toString(16).padStart(2, '0')).join('');
-                            const offlineUrl = `anixflow://${hexPath}`;
+                            const offlineUrl = `offline-file:${encodeURIComponent(offlineEp.filePath)}`;
                             updateViewportComponent(Pages.PLAYER, {
                                 src: offlineUrl,
                                 currentQuality: 720,
                                 availableQuality: { "720": { src: offlineUrl } },
                                 release: args,
                                 episodes: episodesMock,
-                                currentEpisode: { ...d, url: offlineUrl },
+                                currentEpisode: { ...d, url: offlineUrl, offlineFilePath: offlineEp.filePath, isOffline: true },
                                 isOffline: true
                             });
                             return;

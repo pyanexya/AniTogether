@@ -1,4 +1,4 @@
-const { ipcMain, app, shell, BrowserWindow } = require('electron');
+const { app, shell, BrowserWindow } = require('electron');
 
 function getMainWindow() {
     const windows = BrowserWindow.getAllWindows();
@@ -87,15 +87,16 @@ function saveLibrary(lib) {
 const activeDownloads = {};
 let isDownloaderInitialized = false;
 
-function initDownloader(mainWindow) {
+function initDownloader(registerHandler) {
+    if (typeof registerHandler !== 'function') throw new Error('Trusted IPC registrar required');
     if (isDownloaderInitialized) return;
     isDownloaderInitialized = true;
 
-    ipcMain.handle("offline:getLibrary", () => getLibrary());
+    registerHandler("offline:getLibrary", () => getLibrary());
 
-    ipcMain.handle("offline:openFolder", () => shell.openPath(offlineStoragePath));
+    registerHandler("offline:openFolder", () => shell.openPath(offlineStoragePath));
 
-    ipcMain.handle("offline:deleteEpisode", async (_, animeId, episodeId) => {
+    registerHandler("offline:deleteEpisode", async (_, animeId, episodeId) => {
         const downloadId = `${animeId}_${episodeId}`;
         if (activeDownloads[downloadId]) {
             const item = activeDownloads[downloadId];
@@ -451,7 +452,7 @@ function initDownloader(mainWindow) {
         }
     }
 
-    ipcMain.handle("offline:downloadEpisode", async (_, animeMeta, episodeMeta, url) => {
+    registerHandler("offline:downloadEpisode", async (_, animeMeta, episodeMeta, url) => {
         const downloadId = `${animeMeta.id}_${episodeMeta.id}`;
 
         if (activeDownloads[downloadId]) {
@@ -488,7 +489,7 @@ function initDownloader(mainWindow) {
         return true;
     });
 
-    ipcMain.handle("offline:cancelDownload", (_, animeId, episodeId) => {
+    registerHandler("offline:cancelDownload", (_, animeId, episodeId) => {
         const downloadId = `${animeId}_${episodeId}`;
         const item = activeDownloads[downloadId];
 
@@ -515,7 +516,7 @@ function initDownloader(mainWindow) {
         return true;
     });
 
-    ipcMain.handle("offline:getActiveDownloads", () => {
+    registerHandler("offline:getActiveDownloads", () => {
         return Object.entries(activeDownloads)
             .filter(([, d]) => d.animeMeta)
             .map(([id, d]) => ({

@@ -7,9 +7,9 @@ module.exports = {
     asar: {
       unpack: "**/{node_modules/@ffmpeg-installer/**,node_modules/ffmpeg-installer/**}"
     },
-    appBundleId: "com.mjkey.anixflow",
-    name: "AniXFlow",
-    appCopyright: "AniXFlow",
+    appBundleId: "app.anixartix.desktop",
+    name: "AnixArtix",
+    appCopyright: "AnixArtix",
     icon: "icon/icon",
   },
   rebuildConfig: {},
@@ -17,27 +17,27 @@ module.exports = {
     {
       name: '@electron-forge/maker-squirrel',
       config: {
-        name: 'AniXFlow',
-        authors: 'AniXFlow',
-        iconUrl: "https://raw.githubusercontent.com/MjKey/AniXFlow/main/public/assets/icons/anixflow-icon.png",
-        setupExe: `AniXFlow-${package.version}-win32.exe`,
+        name: 'AnixArtix',
+        authors: 'AnixArtix',
+        iconUrl: "https://raw.githubusercontent.com/pyanexya/AniTogether/main/icon/Logo.png",
+        setupExe: `AnixArtix-${package.version}-win32.exe`,
         setupIcon: 'icon/icon.ico',
-        loadingGif: 'icon/install-anim.gif'
+        // No upstream-branded installer animation.
       },
     },
     {
       name: '@electron-forge/maker-zip',
-      platforms: ['darwin', 'linux'],
+      platforms: ['darwin', 'linux', 'win32'],
     },
     {
       name: '@electron-forge/maker-deb',
       config: {
         options: {
-          name: "anixflow",
-          productName: "AniXFlow",
+          name: "anixartix",
+          productName: "AnixArtix",
           icon: "icon/icon.ico",
           maintainer: 'MjKey',
-          homepage: "https://github.com/MjKey/AniXFlow",
+          homepage: "https://github.com/pyanexya/AniTogether",
         }
       },
     },

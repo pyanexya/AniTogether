@@ -1,5 +1,5 @@
 :root {
-  font-family: "Inter", serif;
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
@@ -28,7 +28,7 @@
   --player-middle-button: #1a191950;
   --player-middle-button-select: #1a1919dc;
   --slider-button-inactive-color: #3b3b3b;
-  --slider-button-active-color: #cc2e56;
+  --slider-button-active-color: #ff6573;
   --slider-button-dot-color: #ffffff;
   --warning-color: #ddca1b;
   --info-color: #1b8fdd;
@@ -44,8 +44,9 @@
   --anime-full-row-description-line-height: 1.5em;
 }
 
-:focus {
-  outline: none;
+:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 3px;
 }
 
 .disabled {
@@ -70,45 +71,68 @@ body {
   min-height: 100vh;
 }
 
-.dark-theme {
-  --background-color: #121212;
-  --alt-background-color: #1a1919;
-  --skeleton-background-color: #1c1b1b;
-  --skeleton-animation-color: #2f2c2c;
-  --select-button-left-color: #111111;
-  --click-on-button-player-color: #0f0f0f;
-  --comment-spoiler-color: #0f0f0f7c;
-  --select-button-color: #202020;
-  --alt-gray-background-color: #2C2828;
-  --rate-back-color: #555555;
-  --player-middle-button: #1a191950;
-  --main-text-color: rgb(216 213 208);
-  --secondary-text-color: rgb(175 168 158);
-  --third-text-color: rgb(161, 155, 146);
-  --gray-btn: #6A6A6A;
-  --settings-dropdown-selected-color: rgb(49, 48, 45);
+:root, .dark-theme {
+  --background-color: #101116;
+  --alt-background-color: #15161d;
+  --surface-raised: #1c1d27;
+  --border-color: #ffffff0d;
+  --hover-color: #ffffff08;
+  --accent-color: #ff7884;
+  --accent-contrast: #301219;
+  --accent-soft: #ff657314;
+  --accent-border: #ff657328;
+  --skeleton-background-color: #1b1c25;
+  --skeleton-animation-color: #232430;
+  --select-button-left-color: #ff657316;
+  --click-on-button-player-color: #0d0e13;
+  --comment-spoiler-color: #0d0e137c;
+  --select-button-color: #252632;
+  --alt-gray-background-color: #232430;
+  --rate-back-color: #3f4050;
+  --player-middle-button: #14151c80;
+  --main-text-color: #eeedf6;
+  --secondary-text-color: #a2a2b4;
+  --second-text-color: var(--secondary-text-color);
+  --third-text-color: #9293a6;
+  --gray-btn: #646579;
+  --settings-dropdown-selected-color: #35252c;
   color: var(--main-text-color);
 }
 
 .light-theme {
-  --background-color: #ffffff;
-  --alt-background-color: #f9f9f9;
-  --skeleton-background-color: #f0f0f0;
-  --skeleton-animation-color: #e0e0e0;
-  --select-button-left-color: rgba(0, 0, 0, 0.05);
-  --click-on-button-player-color: #ededed;
-  --comment-spoiler-color: rgba(0, 0, 0, 0.05);
-  --select-button-color: #33333380;
-  --alt-gray-background-color: #e8e8e8;
-  --rate-back-color: #d1d1d1;
-  --player-middle-button: rgba(0, 0, 0, 0.15);
-  --main-text-color: #1f1f1f;
-  --secondary-text-color: #4d4d4d;
-  --third-text-color: #7a7a7a;
-  --gray-btn: #c0c0c0;
-  --settings-dropdown-selected-color: rgb(196, 193, 187);
-  --player-middle-button-select: #e5e5e5;
+  --background-color: #f7f7fb;
+  --alt-background-color: #ffffff;
+  --surface-raised: #ffffff;
+  --border-color: #24203d12;
+  --hover-color: #24203d07;
+  --accent-color: #b82e43;
+  --accent-contrast: #ffffff;
+  --accent-soft: #b82e4310;
+  --accent-border: #b82e4320;
+  --skeleton-background-color: #e9e8f0;
+  --skeleton-animation-color: #dfdeea;
+  --select-button-left-color: #b82e4310;
+  --click-on-button-player-color: #ededf4;
+  --comment-spoiler-color: #24203d12;
+  --select-button-color: #dedce9;
+  --alt-gray-background-color: #e8e7ef;
+  --rate-back-color: #d1d0dd;
+  --player-middle-button: #14151c26;
+  --main-text-color: #222031;
+  --secondary-text-color: #666479;
+  --second-text-color: var(--secondary-text-color);
+  --third-text-color: #6e6c80;
+  --gray-btn: #aaa7ba;
+  --settings-dropdown-selected-color: #efdde1;
+  --player-middle-button-select: #e5e3ee;
   color: var(--main-text-color);
+}
+
+::selection { background: var(--accent-soft); color: var(--accent-color); }
+input, textarea, select { font-family: inherit; }
+#viewport { min-width: 0; scrollbar-color: var(--gray-btn) transparent; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
 
 @keyframes skeletonAnimation {

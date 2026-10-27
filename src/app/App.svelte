@@ -69,10 +69,10 @@
         type: 3,
         state: "Ожидание...",
         largeImageKey: "anidesk-transparent",
-        largeImageText: "AniXFlow - Anixart Client",
+        largeImageText: "AnixArtix · Смотрим вместе",
         instance: true,
         buttons: [
-            { label: "Ссылка на клиент", url: "https://github.com/MjKey/AniXFlow" },
+            { label: "Ссылка на клиент", url: "https://github.com/pyanexya/AniTogether" },
         ],
     });
 
@@ -99,7 +99,7 @@
     // Network Timeout Patch (8-second timeout for non-critical requests + cancellation manager)
     window.addEventListener('unhandledrejection', (event) => {
         if (event.reason && String(event.reason).includes('[AnixartJS]')) {
-            console.warn('[AniXFlow Suppressed API Error]:', event.reason.message || event.reason);
+            console.warn('[AnixArtix Suppressed API Error]:', event.reason.message || event.reason);
             event.preventDefault();
         }
     });
@@ -272,11 +272,7 @@
     /**
      * Глобальные переменные
      */
-    window.baseSettings = settings.getAll().then((res) => (window.baseSettings = res)).catch((e) => console.error("Error fetching baseSettings:", e));
-    window.versions = prc
-        .getVersions()
-        .then((versions) => (window.versions = versions))
-        .catch((e) => console.error("Error fetching versions:", e));
+    // Native settings/version bootstrap completed before this module was imported.
     window.anixApi = wrapAnixApi(new Anixart({
         token: utoken?.token,
         baseUrl: `https://${endpointUrl}`,
@@ -508,9 +504,9 @@
     .main-content {
         display: flex;
         flex-direction: row;
-        height: calc(100vh - 22px);
+        height: calc(100vh - 38px);
         width: 100vw;
-        margin-top: 22px;
+        margin-top: 38px;
         position: relative;
         background-color: var(--background-color);
         overflow: hidden;
@@ -522,6 +518,8 @@
     }
 
     #viewport {
+        min-width: 0;
+        flex: 1;
         overflow-y: auto;
         overflow-x: hidden;
         width: 100vw;

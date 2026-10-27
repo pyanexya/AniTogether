@@ -1,8 +1,8 @@
 <script>
     import { Pages } from "../../pages.js";
     import { localStorageWritable } from "@babichjacob/svelte-localstorage";
-    import LeftMenuButton from "../left-menu/Button.svelte";
-    import LeftMenuAvatar from "../left-menu/Avatar.svelte";
+    import Icon from "../elements/Icon.svelte";
+    import { onDestroy } from "svelte";
     import Home from "../../pages/Home.svelte";
     import Release from "../../pages/Release.svelte";
     import Profile from "../../pages/Profile.svelte";
@@ -26,7 +26,6 @@
     import CollectionList from "../../pages/CollectionList.svelte";
     import Collection from "../../pages/Collection.svelte";
     import Notifications from "../../pages/Notifications.svelte";
-    import NotificationAvailable from "../../icons/notificationAvailable.svg";
     import { notificationCount } from "../stores/notificationCount";
     import Offline from "../../pages/Offline.svelte";
     import OfflineRelease from "../../pages/OfflineRelease.svelte";
@@ -63,7 +62,21 @@
     $: nCount = $notificationCount;
 
     const user_token = localStorageWritable("user_token", null);
-    user_token.subscribe((value) => (utoken = JSON.parse(value)));
+    const unsubscribeToken = user_token.subscribe((value) => {
+        try { utoken = value ? JSON.parse(value) : null; }
+        catch { utoken = null; }
+    });
+    onDestroy(unsubscribeToken);
+    let showNotifications = false;
+    const navigation = [
+        { page: Pages.HOME, label: "Главная", icon: HomeIcon, args: { typeReleases: 0 } },
+        { page: Pages.DISCOVER, label: "Открытия", icon: DiscoverIcon },
+        { page: Pages.SEARCH, label: "Поиск", icon: SearchIcon, args: { query: null } },
+        { page: Pages.BOOKMARKS, label: "Мой список", icon: BookmarkIcon, args: { typeBookmark: 0, sort: 1 } },
+        { page: Pages.COLLECTION_LIST, label: "Коллекции", icon: CollectionIcon },
+        { page: Pages.FRIENDS, label: "Друзья", icon: FriendsIcon },
+        { page: Pages.OFFLINE, label: "Загрузки", icon: DownloadIcon },
+    ];
 
     window.updateViewportComponent = (page, args, history = false) => {
         setViewportScrollEvent(null);
@@ -84,10 +97,10 @@
                 type: 3,
                 state: "Ожидание...",
                 largeImageKey: "anidesk-transparent",
-                largeImageText: "AniXFlow - Anixart Client",
+                largeImageText: "AnixArtix · аниме вместе",
                 instance: true,
                 buttons: [
-                    { label: "Ссылка на клиент", url: "https://github.com/MjKey/AniXFlow" },
+                    { label: "Ссылка на клиент", url: "https://github.com/pyanexya/AniTogether" },
                 ],
             });
         }
@@ -104,128 +117,69 @@
 
     let myProfile;
     $: if (utoken && utoken.id) {
-        myProfile = anixApi.profile.info(utoken.id);
+        myProfile = anixApi.profile.info(utoken.id).catch(() => null);
     } else {
         myProfile = Promise.resolve(null);
     }
 </script>
 
-{#snippet defaultAvatar(callback)}
-    <LeftMenuAvatar
-        onClickCallback={callback}
-        avatar="./assets/icons/defaultAvatar.svg"
-    />
-{/snippet}
-
-<div
-    class="left-menu menu-hidden unselectable"
-    class:hide={viewportComponent == views[Pages.PLAYER]}
->
-    <div class="top-menu-content">
-        {#if !utoken}
-            {@render defaultAvatar(() => updateViewportComponent(Pages.LOGIN))}
-        {:else}
-            {#await myProfile}
-                {@render defaultAvatar(null)}
-            {:then p}
-                <LeftMenuAvatar
-                    onClickCallback={() =>
-                        updateViewportComponent(Pages.PROFILE, utoken.id)}
-                    avatar={p.profile.avatar}
-                />
-            {/await}
-        {/if}
-
-        <LeftMenuButton
-            icon={HomeIcon}
-            selected={viewportComponent == views[0]}
-            viewportComponentIndex={0}
-            argsComponent = {{
-                typeReleases: 0
-            }}
-        />
-        <LeftMenuButton
-            icon={BookmarkIcon}
-            selected={viewportComponent == views[1]}
-            viewportComponentIndex={1}
-            argsComponent = {{
-                typeBookmark: 0,
-                sort: 1
-            }}
-        />
-        <LeftMenuButton
-            icon={FriendsIcon}
-            selected={viewportComponent == views[2]}
-            viewportComponentIndex={2}
-        />
-        <LeftMenuButton
-            icon={CollectionIcon}
-            selected={viewportComponent == views[3]}
-            viewportComponentIndex={3}
-        />
-        <LeftMenuButton
-            icon={DiscoverIcon}
-            selected={viewportComponent == views[4]}
-            viewportComponentIndex={4}
-        />
-        <LeftMenuButton
-            icon={SearchIcon}
-            selected={viewportComponent == views[5]}
-            viewportComponentIndex={5}
-            argsComponent={{
-                query: null
-            }}
-        />
-        <LeftMenuButton
-            icon={DownloadIcon}
-            selected={viewportComponent == views[Pages.OFFLINE] || viewportComponent == views[Pages.OFFLINE_RELEASE]}
-            viewportComponentIndex={Pages.OFFLINE}
-        />
-    </div>
+<aside class="left-menu unselectable" class:hide={viewportComponent == views[Pages.PLAYER]} aria-label="Навигация">
+    <button class="brand" onclick={() => updateViewportComponent(Pages.HOME, { typeReleases: 0 })} title="AnixArtix — главная">
+        <img src="./assets/icons/anixartix.png" alt="" width="34" height="34" />
+        <span class="brand-text">AnixArtix<span>АНИМЕ БЛИЖЕ</span></span>
+    </button>
+    <div class="section-label">ОБЗОР</div>
+    <nav>
+        {#each navigation as item, index}
+            {#if index === 3}<div class="section-label library-label">БИБЛИОТЕКА</div>{/if}
+            <button class="nav-item" class:selected={viewportComponent === views[item.page] || (item.page === Pages.OFFLINE && viewportComponent === OfflineRelease)}
+                aria-current={viewportComponent === views[item.page] ? "page" : undefined}
+                title={item.label} onclick={() => updateViewportComponent(item.page, item.args ?? null)}>
+                <Icon src={item.icon} varColor="--main-text-color" size={{ width: 20, height: 20 }} />
+                <span>{item.label}</span>
+            </button>
+        {/each}
+    </nav>
     <div class="bottom-menu-content">
-        <LeftMenuButton
-            icon={nCount > 0 ? NotificationAvailable : NotificationIcon}
-            modalComponent={Notifications}
-            type="modal"
-        />
-        <LeftMenuButton
-            icon={SettingsIcon}
-            selected={viewportComponent == views[7]}
-            viewportComponentIndex={7}
-        />
+        <button class="nav-item" title="Уведомления" onclick={() => showNotifications = true}>
+            <Icon src={NotificationIcon} varColor="--main-text-color" size={{ width: 20, height: 20 }} />
+            <span>Уведомления</span>
+            {#if nCount > 0}<b class="count" aria-label={`${nCount} новых уведомлений`}>{nCount > 99 ? "99+" : nCount}</b>{/if}
+        </button>
+        <button class="nav-item" class:selected={viewportComponent === Settings} title="Настройки" onclick={() => updateViewportComponent(Pages.SETTINGS)}>
+            <Icon src={SettingsIcon} varColor="--main-text-color" size={{ width: 20, height: 20 }} />
+            <span>Настройки</span>
+        </button>
+        <button class="account" title={utoken ? "Мой профиль" : "Войти в Anixart"} onclick={() => updateViewportComponent(utoken ? Pages.PROFILE : Pages.LOGIN, utoken?.id)}>
+            {#await myProfile then profile}
+                <img src={profile?.profile?.avatar || "./assets/icons/defaultAvatar.svg"} alt="" width="34" height="34" />
+                <span><strong>{profile?.profile?.login || (utoken ? "Мой профиль" : "Войти в Anixart")}</strong><small>{utoken ? "Ваша библиотека" : "Списки, история и друзья"}</small></span>
+            {/await}
+        </button>
     </div>
-</div>
+</aside>
+{#if showNotifications}
+    <Notifications showed={showNotifications} on:closeModal={() => showNotifications = false} />
+{/if}
 
 <style>
-    .left-menu {
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-        background-color: var(--alt-background-color);
-        align-items: center;
-        overflow: hidden;
-        z-index: 10;
-    }
-
-    .top-menu-content {
-        width: 100%;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        margin-top: 20px;
-    }
-
-    .bottom-menu-content {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        margin-top: auto;
-        width: 100%;
-        margin-bottom: 20px;
-    }
-
-    .menu-hidden {
-        width: 75px;
-        min-width: 75px;
-    }
+    .left-menu { display:flex; flex-direction:column; flex:0 0 208px; width:208px; height:100%; box-sizing:border-box; background:var(--alt-background-color); border-right:1px solid var(--border-color); padding:20px 12px 12px; z-index:10; overflow-y:auto; }
+    .brand { display:flex; align-items:center; gap:10px; text-align:left; padding:0 8px 25px; min-height:59px; flex-shrink:0; }
+    .brand-text { font-size:17px; letter-spacing:-.6px; font-weight:750; }
+    .brand-text span { display:block; font-size:8px; letter-spacing:2.3px; font-weight:600; color:var(--third-text-color); margin-top:3px; }
+    .section-label { padding:0 14px 9px; color:var(--third-text-color); font-size:9px; font-weight:700; letter-spacing:1.7px; }
+    .library-label { margin-top:23px; }
+    nav { display:flex; flex-direction:column; gap:4px; }
+    .nav-item { display:flex; align-items:center; gap:13px; min-height:42px; width:100%; padding:0 14px; border-radius:10px; text-align:left; font-size:12px; font-weight:550; color:var(--secondary-text-color); transition:background .15s,color .15s; }
+    .nav-item:hover { background:var(--hover-color); color:var(--main-text-color); }
+    .nav-item.selected { background:var(--accent-soft); color:var(--accent-color); }
+    .nav-item.selected::before { content:""; position:absolute; left:-12px; height:18px; width:3px; background:var(--accent-color); border-radius:0 3px 3px 0; }
+    .bottom-menu-content { margin-top:auto; padding-top:30px; }
+    .count { margin-left:auto; background:var(--accent-color); color:var(--accent-contrast); border-radius:6px; padding:2px 5px; font-size:9px; }
+    .account { display:flex; align-items:center; gap:10px; width:100%; border-top:1px solid var(--border-color); padding:17px 6px 0; margin-top:14px; text-align:left; }
+    .account img { border-radius:11px; flex-shrink:0; object-fit:cover; }
+    .account span { min-width:0; }
+    .account strong { display:block; font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:125px; }
+    .account small { display:block; font-size:9px; color:var(--third-text-color); margin-top:3px; }
+    @media (max-width:900px) { .left-menu { width:72px; flex-basis:72px; padding:18px 8px 10px; } .brand { padding:0 10px 24px; } .brand-text,.section-label,.nav-item span,.account span { display:none; } .library-label { display:block; height:10px; padding:0; margin:0; } .nav-item { justify-content:center; padding:0; } .nav-item.selected::before { left:-8px; } .account { justify-content:center; padding:14px 0 0; } .count { position:absolute; right:0; top:0; } }
 </style>

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "AnixArtix",
+  "version": "0.1.0",
+  "identifier": "app.anixartix.desktop",
+  "build": {
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../public"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "AnixArtix",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "decorations": false,
+        "backgroundColor": "#101116",
+        "dragDropEnabled": false,
+        "create": false
+      }
+    ],
+    "security": {
+      "capabilities": [
+        "main"
+      ],
+      "csp": "default-src 'self'; script-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http://offline.localhost; media-src 'self' blob: https: http: offline:; connect-src 'self' http://127.0.0.1:* ipc: http://ipc.localhost https: wss: ws://localhost:* ws://127.0.0.1:* http://offline.localhost; font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; base-uri 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "category": "Entertainment",
+    "shortDescription": "AnixArtix \u2014 anime and watch together",
+    "icon": [
+      "../icon/icon.ico",
+      "../icon/Logo.png"
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "Russian",
+          "English"
+        ],
+        "displayLanguageSelector": false
+      }
+    },
+    "license": "GPL-2.0-only",
+    "licenseFile": "../LICENSE"
+  }
+}

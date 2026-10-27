@@ -5,6 +5,9 @@
     export let args;
     import { localStorageWritable } from "@babichjacob/svelte-localstorage";
     import { onDestroy, onMount } from "svelte";
+    import { createNativeMediaSession, classifiedIsHls, providerReferer } from "../components/watch-together/native-media.js";
+    import WatchTogetherPanel from "../components/watch-together/WatchTogetherPanel.svelte";
+    import { playerMediaIdentity, resolveEpisodeSource } from "../components/watch-together/player-media.js";
     import PlayerGui from "../components/player/PlayerGUI.svelte";
     import { AniLibriaParser, SibnetParser, KodikParser } from "anixartjs";
     import { playerSettingsStore } from "../components/stores/pageHistory.js";
@@ -23,6 +26,7 @@
 
     // Manager instances
     let hlsManager = new HlsManager();
+    const nativeMedia = createNativeMediaSession(window.mediaTransport, window.offlineApi);
     let volumeManager = new VolumeManager();
     let rpcManager = null;
     let sleepTimerManager = null;
@@ -48,6 +52,8 @@
     let timeout;
     let mainDiv;
     let currentEpisode;
+    let loadedEpisode = args?.currentEpisode;
+    let loadedReleaseId = args?.release?.id;
     let startTimestamp;
 
     let progressPercent = 0;
@@ -82,6 +88,40 @@
     let activeEpisodeRequestId = 0;
     let showReloadHint = false;
     let reloadHintTimeout = null;
+    let playerDestroyed = false;
+    let sourceLoading = true;
+    let roomState = { status: 'idle', role: null };
+    let roomMediaRequest = 0;
+    let roomMediaLoad = false;
+    $: playbackLocked = roomState.role === 'guest' && !['idle', 'closed'].includes(roomState.status);
+    $: sharedMedia = sourceLoading || args?.isOffline ? null : playerMediaIdentity(args?.release, currentEpisode || args?.currentEpisode, args?.episodes);
+    $: sharedLabel = [args?.release?.title_ru, (currentEpisode || args?.currentEpisode)?.name, resolveEpisodeSource(currentEpisode || args?.currentEpisode, args?.episodes)?.type?.name].filter(Boolean).join(' · ');
+
+    function receiveRoomState(state) {
+        roomState = state;
+        if (!state.role) { ++roomMediaRequest; if (roomMediaLoad) { ++activeEpisodeRequestId; nativeMedia.cancel(); } roomMediaLoad = false; }
+    }
+
+    async function loadRoomMedia(identity) {
+        const generation = ++roomMediaRequest;
+        if (roomState.role !== 'guest' || !identity?.sourceId || !identity?.dubberId) throw new Error('Invalid room media');
+        // Resolve through the user's normal authenticated catalog API, not a peer-supplied URL.
+        const [releaseResult, episodesResult] = await Promise.all([
+            Number(args?.release?.id) === identity.releaseId ? Promise.resolve({ release: args.release }) : anixApi.release.info(identity.releaseId, true),
+            anixApi.release.getEpisodes(identity.releaseId, identity.dubberId, identity.sourceId),
+        ]);
+        if (playerDestroyed || generation !== roomMediaRequest || roomState.role !== 'guest') return;
+        const episodes = episodesResult?.episodes || [];
+        const episode = episodes.find((item) => Number(item.position) === identity.episodePosition);
+        const actual = playerMediaIdentity(releaseResult?.release, episode, episodes);
+        if (!actual || Object.keys(identity).some((field) => actual[field] !== identity[field])) throw new Error('Unavailable or mismatched media');
+        args = { ...args, release: releaseResult.release, episodes, currentEpisode: episode, src: null, isOffline: false };
+        currentEpisode = episode;
+        roomMediaLoad = generation;
+        try { if (await playVideo(episode, true) === false) throw new Error('Source unavailable'); }
+        finally { if (roomMediaLoad === generation) roomMediaLoad = false; }
+    }
+
 
     async function togglePiP() {
         if (!video) return;
@@ -134,7 +174,7 @@
         resetReloadHintTimer();
         const ep = currentEpisode || args?.currentEpisode;
         if (ep) {
-            await playVideo(ep);
+            await playVideo(ep, playbackLocked);
         }
     }
 
@@ -176,6 +216,7 @@
     }
 
     function performRestartVideo() {
+        if (playbackLocked) return;
         if (video) {
             video.currentTime = 0;
             resumeToastMessage = null;
@@ -188,7 +229,7 @@
     }
 
     function tryRestoreWatchPosition() {
-        if (hasRestoredPosition || playerSettings?.rememberPosition === false || !video || !video.duration) return;
+        if (playbackLocked || hasRestoredPosition || playerSettings?.rememberPosition === false || !video || !video.duration) return;
 
         const relId = getReleaseId();
         const ep = currentEpisode || args?.currentEpisode;
@@ -234,7 +275,7 @@
     }
 
     function trySaveWatchPosition() {
-        if (playerSettings?.rememberPosition === false || !video || !video.duration || isNaN(video.currentTime)) return;
+        if (sourceLoading || playerSettings?.rememberPosition === false || !video || !video.duration || isNaN(video.currentTime)) return;
         const now = Date.now();
         if (now - lastWatchSaveTime >= 2000) {
             lastWatchSaveTime = now;
@@ -258,6 +299,7 @@
     }
 
     function checkAndTriggerSkip(cTime) {
+        if (playbackLocked) { activeSkipType = null; return; }
         if (!video || !video.duration || cTime == null) return;
 
         const isAutoOp = Boolean(playerSettings?.autoSkipOpening);
@@ -309,6 +351,7 @@
     }
 
     function performSkipOp() {
+        if (playbackLocked) return;
         if (skipTimes.op && video) {
             video.currentTime = Number(skipTimes.op.end);
             showSkipToast("Опенинг пропущен");
@@ -317,6 +360,7 @@
     }
 
     function performSkipEd() {
+        if (playbackLocked) return;
         if (skipTimes.ed && video) {
             video.currentTime = Number(skipTimes.ed.end);
             showSkipToast("Эндинг пропущен");
@@ -385,6 +429,7 @@
     }
 
     function applyPlaybackRate() {
+        if (playbackLocked) return;
         if (video && playerSettings?.defaultPlaybackRate) {
             try {
                 video.playbackRate = Number(playerSettings.defaultPlaybackRate);
@@ -395,6 +440,7 @@
     }
 
     function changePlaybackRate(rate) {
+        if (playbackLocked) return;
         playerSettings.defaultPlaybackRate = Number(rate);
         persistPlayerSettings(playerSettings);
         applyPlaybackRate();
@@ -470,8 +516,13 @@
         if (!qualitySrc) return;
         args.currentQuality = qualityStr;
         const realSrc = qualitySrc.startsWith('//') ? `https:${qualitySrc}` : qualitySrc;
-        args.src = realSrc;
-        hlsManager.changeQuality(realSrc);
+        const requestId = activeEpisodeRequestId;
+        try {
+            const local = await nativeMedia.open(realSrc, providerReferer(resolveEpisodeSource(currentEpisode, args.episodes)), () => !playerDestroyed && requestId === activeEpisodeRequestId);
+            if (!local) return;
+            args.src = realSrc;
+            hlsManager.changeQuality(local, classifiedIsHls(realSrc, local));
+        } catch (_) { showSkipToast('Нативный транспорт видео недоступен. Качество не изменено.'); return; }
         setTimeout(() => {
             renderUpscale();
         }, 300);
@@ -483,6 +534,10 @@
         }
     }
 
+    function handleVideoUpscale() {
+        if (!playerDestroyed) renderUpscale().catch(() => {});
+    }
+
     onMount(async () => {
         if (window.availableGPU) {
             window.availableGPU.then((res) => (availableGPU = res));
@@ -490,6 +545,7 @@
         if (window.elecWindow?.isFullScreen) {
             isFullscreen = await window.elecWindow.isFullScreen();
         }
+        if (playerDestroyed) return;
         if (window.elecWindow?.onFullscreenChange) {
             unsubFullscreen = window.elecWindow.onFullscreenChange((isFs) => {
                 isFullscreen = isFs;
@@ -500,33 +556,38 @@
         if (video) {
             video.addEventListener("enterpictureinpicture", handleEnterPiP);
             video.addEventListener("leavepictureinpicture", handleLeavePiP);
-            video.addEventListener("loadedmetadata", () => {
-                renderUpscale().catch((e) => console.error("[Player] Upscale on metadata error:", e));
-            });
-            video.addEventListener("playing", () => {
-                renderUpscale().catch((e) => console.error("[Player] Upscale on playing error:", e));
-            });
+            video.addEventListener("loadedmetadata", handleVideoUpscale);
+            video.addEventListener("playing", handleVideoUpscale);
         }
         init();
     });
 
-    async function playVideo(episode) {
+    async function playVideo(episode, fromRoom = false) {
+        if (playerDestroyed || !episode || (playbackLocked && !fromRoom)) return;
+        sourceLoading = true;
+        loading = true;
+        currentEpisode = episode;
+        args.currentEpisode = episode;
         resetReloadHintTimer();
         const requestId = ++activeEpisodeRequestId;
+        nativeMedia.cancel();
         const relId = getReleaseId();
-        const prevEp = currentEpisode || args?.currentEpisode;
-        if (video && video.duration && relId && prevEp) {
-            savePosition(relId, prevEp, video.currentTime, video.duration);
+        const prevEp = loadedEpisode || args?.currentEpisode;
+        if (video && video.duration && loadedReleaseId && prevEp) {
+            savePosition(loadedReleaseId, prevEp, video.currentTime, video.duration);
         }
+        video?.pause();
+        loadedEpisode = episode;
+        loadedReleaseId = relId;
         hasRestoredPosition = false;
         resumeToastMessage = null;
         updateSkipTimes();
         let availableQuality, link;
-        let source =
-            typeof episode.source == "number"
-                ? args.episodes.find((x) => episode.source == x.source["@id"])
-                      .source
-                : episode.source;
+        const source = resolveEpisodeSource(episode, args.episodes);
+        if (!source && !args.isOffline) {
+            showSkipToast('Источник серии недоступен');
+            return false;
+        }
 
         rememberPlaybackSelection(source);
 
@@ -534,7 +595,11 @@
             const offlineSrc = episode.url || args.src;
             args.src = offlineSrc;
             args.availableQuality = { "720": { src: offlineSrc } };
-            hlsManager.loadSource(offlineSrc, true);
+            try {
+                const local = await nativeMedia.open(offlineSrc, null, () => !playerDestroyed && requestId === activeEpisodeRequestId);
+                if (!local) return false;
+                hlsManager.loadSource(local, !playbackLocked, false);
+            } catch (_) { showSkipToast('Не удалось открыть загруженную серию через нативный транспорт.'); return false; }
             if (rpcManager) {
                 rpcManager.setPlaying(episode.name, video?.currentTime, video?.duration);
             }
@@ -559,7 +624,7 @@
                 case "Liberty":
                 case "Libria":
                     await utils.fallback(async () => {
-                        availableQuality = await window.prc.parseLibria(
+                        availableQuality = await AniLibriaParser.getDirectLinks(
                             episode.url,
                         );
                         if (!availableQuality) return false;
@@ -583,13 +648,13 @@
                     break;
             }
         } catch (err) {
-            console.error("[Player] Error parsing episode source:", err);
+            console.error("[Player] Episode source resolution failed");
             resumeToastMessage = "Ошибка загрузки источника видео";
             clearTimeout(resumeToastTimeout);
             resumeToastTimeout = setTimeout(() => { resumeToastMessage = null; }, 5000);
         }
 
-        if (requestId !== activeEpisodeRequestId) return;
+        if (playerDestroyed || requestId !== activeEpisodeRequestId) return;
 
         args.availableQuality = availableQuality || {};
         const availableKeys = Object.keys(availableQuality || {});
@@ -609,8 +674,18 @@
 
         if (url) {
             link = url.startsWith('//') ? `https:${url}` : url;
-            hlsManager.loadSource(link, true);
-            args.src = link;
+            try {
+                const local = await nativeMedia.open(link, providerReferer(source), () => !playerDestroyed && requestId === activeEpisodeRequestId);
+                if (!local) return false;
+                hlsManager.loadSource(local, !playbackLocked, classifiedIsHls(link, local));
+                args.src = link;
+            } catch (_) {
+                showSkipToast('Нативный транспорт видео недоступен. Прямое подключение отключено.');
+                return false;
+            }
+        } else {
+            showSkipToast('Не удалось получить видео. Попробуйте другой источник.');
+            return false;
         }
 
         if (typeof window !== 'undefined' && window.analytics) {
@@ -664,6 +739,7 @@
         };
 
         video.onloadedmetadata = () => {
+            sourceLoading = false;
             loading = true;
             if (video.videoWidth && video.videoHeight) {
                 videoAspect = video.videoWidth / video.videoHeight;
@@ -709,7 +785,7 @@
             const triggered = await sleepTimerManager.onEpisodeEnd();
             if (triggered) return;
 
-            if (playerSettings?.autoplayEpisode) {
+            if (!playbackLocked && playerSettings?.autoplayEpisode) {
                 let e = args.episodes.find(
                     (x) => x.position == currentEpisode.position + 1,
                 );
@@ -753,7 +829,13 @@
                 playVideo(currentEpisode);
             }
         } else {
-            hlsManager.loadSource(args.src, true);
+            {
+                const initialRequest = activeEpisodeRequestId;
+                const original = args.src;
+                nativeMedia.open(original, providerReferer(resolveEpisodeSource(currentEpisode, args.episodes)), () => !playerDestroyed && initialRequest === activeEpisodeRequestId).then((local) => {
+                    if (local) hlsManager.loadSource(local, !playbackLocked, classifiedIsHls(original, local));
+                }).catch(() => showSkipToast('Нативный транспорт видео недоступен. Прямое подключение отключено.'));
+            }
         }
 
         // Initialize non-blocking UI controls & integrations asynchronously
@@ -795,15 +877,16 @@
         hotkeyManager = new HotkeyManager({
             getHotkeys: () => playerSettings?.hotkeys ?? {},
             handlers: {
-                hotkeyPlayPause: () => (isPaused ? video.play() : video.pause()),
+                hotkeyPlayPause: () => { if (!playbackLocked) isPaused ? video.play() : video.pause(); },
                 hotkeyMute: () => (video.muted = !video.muted),
                 hotkeyFullscreen: () =>
                     isFullscreen
                         ? window.elecWindow?.exitFullscreen()
                         : window.elecWindow?.enterFullscreen(),
-                hotkeyForward: () => (video.currentTime += 10),
-                hotkeyBackward: () => (video.currentTime -= 10),
+                hotkeyForward: () => { if (!playbackLocked) video.currentTime += 10; },
+                hotkeyBackward: () => { if (!playbackLocked) video.currentTime -= 10; },
                 hotkeySkipOpening: () => {
+                    if (playbackLocked) return;
                     if (skipTimes.op && video.currentTime >= skipTimes.op.start && video.currentTime < skipTimes.op.end) {
                         performSkipOp();
                     } else if (skipTimes.ed && video.currentTime >= skipTimes.ed.start && video.currentTime < skipTimes.ed.end) {
@@ -813,6 +896,7 @@
                     }
                 },
                 hotkeyNextEpisode: () => {
+                    if (playbackLocked) return;
                     let idx = args.episodes.findIndex((x) => x.position == currentEpisode.position);
                     let e = args.episodes[idx + 1];
                     if (e) {
@@ -821,6 +905,7 @@
                     }
                 },
                 hotkeyPrevEpisode: () => {
+                    if (playbackLocked) return;
                     let idx = args.episodes.findIndex((x) => x.position == currentEpisode.position);
                     let p = args.episodes[idx - 1];
                     if (p) {
@@ -833,6 +918,7 @@
                         window.elecWindow?.exitFullscreen();
                         return;
                     }
+                    if (document.activeElement?.closest?.('.together-widget')) return;
                     updateViewportComponent(Pages.RELEASE, { id: args.release.id });
                 },
                 onWheel: (deltaY) => {
@@ -858,9 +944,14 @@
     }
 
     onDestroy(() => {
+        playerDestroyed = true;
+        nativeMedia.destroy();
+        ++activeEpisodeRequestId;
+        ++roomMediaRequest;
+        clearTimeout(reloadHintTimeout);
         const relId = getReleaseId();
         const ep = currentEpisode || args?.currentEpisode;
-        if (video && video.duration && relId && ep) {
+        if (!sourceLoading && video && video.duration && relId && ep) {
             savePosition(relId, ep, video.currentTime, video.duration);
             if (video.currentTime / video.duration >= 0.75) {
                 syncShikimoriWatchProgress(ep);
@@ -892,6 +983,8 @@
         }
 
         if (video) {
+            video.removeEventListener("loadedmetadata", handleVideoUpscale);
+            video.removeEventListener("playing", handleVideoUpscale);
             video.removeEventListener("enterpictureinpicture", handleEnterPiP);
             video.removeEventListener("leavepictureinpicture", handleLeavePiP);
             if (!video.muted) {
@@ -904,6 +997,9 @@
             video.onwaiting = null;
             video.onplaying = null;
             video.onended = null;
+            video.oncanplay = null;
+            video.ondurationchange = null;
+            video.onerror = null;
             video = null;
         }
 
@@ -917,6 +1013,7 @@
 <div bind:this={mainDiv} class="anidesk-player full" style="--video-aspect: {videoAspect};">
     <PlayerGui
         {playVideo}
+        {playbackLocked}
         {args}
         {isHidden}
         {forceHide}
@@ -958,6 +1055,16 @@
         {performRestartVideo}
         {performSkipOp}
         {performSkipEd}
+    />
+
+    <WatchTogetherPanel
+        {video}
+        media={sharedMedia}
+        mediaLabel={sharedLabel}
+        {sourceLoading}
+        unavailable={Boolean(args?.isOffline)}
+        loadMedia={loadRoomMedia}
+        onState={receiveRoomState}
     />
 
     {#if loading}

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, net, autoUpdater, dialog, Tray, Menu, Notification, nativeImage, shell, protocol } = require('electron');
+const { app, BrowserWindow, ipcMain, net, dialog, Tray, Menu, Notification, nativeImage, shell, protocol } = require('electron');
 if (require('electron-squirrel-startup')) {
   app.quit();
   process.exit(0);
@@ -17,6 +17,30 @@ const serve = require('electron-serve').default;
 const loadURL = serve({ directory: './public' });
 const fs = require('fs');
 const rpc = require("@xhayper/discord-rpc");
+const APP_NAME = require('../package.json').productName || app.getName();
+const { isTrustedAppUrl, isHttpUrl, shikimoriTokenUrl, redactedUrl, isTrustedMainFrame } = require('./security');
+
+function handleTrusted(channel, handler) {
+  ipcMain.handle(channel, (event, ...args) => {
+    if (!isTrustedMainFrame(event, mainWindow, !app.isPackaged && isDev())) {
+      throw new Error('Untrusted IPC sender');
+    }
+    return handler(event, ...args);
+  });
+}
+
+function guardWindowNavigation(win, isMain = false) {
+  const allowUrl = (url) => isMain && isTrustedAppUrl(url, !app.isPackaged && isDev());
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!allowUrl(url)) event.preventDefault();
+  });
+  win.webContents.on('will-redirect', (event, url) => {
+    if (!allowUrl(url)) event.preventDefault();
+  });
+  win.webContents.on('will-attach-webview', (event) => event.preventDefault());
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+}
+
 
 function loadEnv() {
   const envPath = app.isPackaged 
@@ -99,7 +123,7 @@ async function handleAnixflowCacheRequest(req) {
     const hexUrl = rawUrl.replace(/^anixflow-cache:\/\//, '').replace(/\/$/, '');
     const originalUrl = hexDecodeUrl(hexUrl);
 
-    if (!originalUrl) {
+    if (!isHttpUrl(originalUrl)) {
       return new Response(null, { status: 400 });
     }
 
@@ -189,7 +213,7 @@ const { SibnetParser } = require('anixartjs');
 
 const isDebugMode = process.argv.includes('--debug') || process.argv.includes('-d');
 if (isDebugMode) {
-  console.log('[DEBUG] Running AniXFlow in DEBUG mode');
+  console.log(`[DEBUG] Running ${APP_NAME} in DEBUG mode`);
 }
 
 /**
@@ -199,8 +223,8 @@ let mainWindow;
 let tray = null;
 let isQuitting = false;
 
-const server = 'https://update.electronjs.org';
-const feed = `${server}/MjKey/AniXFlow/${process.platform}-${process.arch}/${app.getVersion()}`;
+// Never install the upstream application's releases over this fork.
+// A fork-owned, verified release channel can be added explicitly in a future release.
 const UserAgent = "AnixartApp/9.0 BETA 3-25021818 (Android 9; SDK 28; x86_64; ROG ASUS AI2201_B; ru)";
 const rpcClientId = '1372649290438148137';
 const SettingsPath = path.join(app.getPath("userData"), "settings.json");
@@ -263,104 +287,16 @@ function broadcastUpdaterStatus(statusData) {
   }
 }
 
-async function checkForUpdatesGitHub() {
-  const currentVersion = app.getVersion();
-  try {
-    const res = await net.fetch("https://api.github.com/repos/MjKey/AniXFlow/releases/latest", {
-      headers: { "User-Agent": "AniXFlowApp" }
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const latestTag = (data.tag_name || "").replace(/^v/, "").trim();
-      const cleanCurrent = (currentVersion || "").replace(/^v/, "").trim();
-      const isNewer = compareVersions(latestTag, cleanCurrent) > 0;
-      return {
-        status: isNewer ? "available" : "latest",
-        latestVersion: latestTag,
-        currentVersion: cleanCurrent,
-        releaseUrl: data.html_url || "https://github.com/MjKey/AniXFlow/releases",
-        text: isNewer ? `Доступно обновление v${latestTag}!` : `У вас установлена последняя версия (v${cleanCurrent})`
-      };
-    }
-  } catch (e) {
-    console.error("GitHub release check error:", e);
-    return { status: "error", text: "Ошибка при проверке обновлений.", currentVersion };
-  }
-  return { status: "latest", currentVersion };
+function disabledUpdateStatus() {
+  return {
+    status: 'disabled',
+    currentVersion: app.getVersion(),
+    text: 'Автообновления отключены: канал обновлений этого клиента ещё не настроен.'
+  };
 }
 
 function initAutoUpdater() {
-  if (!SettingsFirst.AutoUpdate) return;
-
-  if (app.isPackaged) {
-    autoUpdater.on("checking-for-update", () => {
-      if (isDebugMode) console.log("[DEBUG] Squirrel checking for updates...");
-      broadcastUpdaterStatus({ status: "checking", text: "Проверка обновлений..." });
-    });
-
-    autoUpdater.on("update-available", () => {
-      if (isDebugMode) console.log("[DEBUG] Squirrel update available - downloading");
-      broadcastUpdaterStatus({ status: "downloading", text: "Найдено обновление! Идет фоновая загрузка..." });
-    });
-
-    autoUpdater.on("update-not-available", () => {
-      if (isDebugMode) console.log("[DEBUG] Squirrel update not available");
-      broadcastUpdaterStatus({ status: "latest", text: `У вас установлена последняя версия (v${app.getVersion()})` });
-    });
-
-    autoUpdater.on('error', async (err) => {
-      if (isDebugMode) console.log('[DEBUG] Squirrel AutoUpdater error, falling back to GitHub API:', err?.message || err);
-      const ghStatus = await checkForUpdatesGitHub();
-      broadcastUpdaterStatus(ghStatus);
-    });
-
-    autoUpdater.on('update-downloaded', (event, releaseNotes, releaseName) => {
-      if (isDebugMode) console.log("[DEBUG] Squirrel update downloaded");
-      broadcastUpdaterStatus({
-        status: "downloaded",
-        text: "Обновление скачано и готово к установке!",
-        releaseNotes,
-        releaseName
-      });
-
-      const dialogOpts = {
-        type: 'info',
-        buttons: ['Перезапустить и обновить', 'Позже'],
-        title: 'Обновление AniXFlow',
-        message: process.platform === 'win32' ? (releaseName || 'Новая версия готова!') : releaseName,
-        detail: 'Новая версия успешно скачана. Перезапустить приложение сейчас для установки?'
-      };
-
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        dialog.showMessageBox(mainWindow, dialogOpts).then((returnValue) => {
-          if (returnValue.response === 0) {
-            isQuitting = true;
-            autoUpdater.quitAndInstall();
-          }
-        });
-      }
-    });
-
-    try {
-      autoUpdater.setFeedURL({ url: feed });
-    } catch (e) {
-      console.error("AutoUpdater setFeedURL error:", e);
-    }
-  }
-
-  setTimeout(async () => {
-    try {
-      if (app.isPackaged) {
-        autoUpdater.checkForUpdates();
-      } else {
-        const status = await checkForUpdatesGitHub();
-        broadcastUpdaterStatus(status);
-      }
-    } catch (e) {
-      const status = await checkForUpdatesGitHub();
-      broadcastUpdaterStatus(status);
-    }
-  }, 5000);
+  broadcastUpdaterStatus(disabledUpdateStatus());
 }
 
 const isFirstInstance = app.requestSingleInstanceLock();
@@ -410,11 +346,11 @@ function createTray() {
   const iconPath = getAppIconPath();
   const trayIcon = fs.existsSync(iconPath) ? nativeImage.createFromPath(iconPath) : nativeImage.createEmpty();
   tray = new Tray(trayIcon);
-  tray.setToolTip('AniXFlow');
+  tray.setToolTip(APP_NAME);
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Показать AniXFlow',
+      label: `Показать ${APP_NAME}`,
       click: () => {
         if (mainWindow) {
           if (mainWindow.isMinimized()) mainWindow.restore();
@@ -451,17 +387,18 @@ function createDebugWindow() {
   debugWindow = new BrowserWindow({
     width: 850,
     height: 600,
-    title: 'AniXFlow — Live Debug Console',
+    title: `${APP_NAME} — Live Debug Console`,
     icon: getAppIconPath(),
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-      sandbox: false
+      sandbox: true
     }
   });
 
-  const debugHtmlPath = path.join(__dirname, 'public', 'debug.html');
+  guardWindowNavigation(debugWindow);
+  const debugHtmlPath = path.join(__dirname, '..', 'public', 'debug.html');
   debugWindow.loadFile(debugHtmlPath);
 
   debugWindow.on('closed', () => {
@@ -516,6 +453,8 @@ function createWindow() {
     icon: getAppIconPath(),
     show: false,
   });
+
+  guardWindowNavigation(mainWindow, true);
 
   if (SettingsFirst.EnableDevTools) {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
@@ -592,7 +531,7 @@ function createWindow() {
       } catch (_) {}
 
       if (isDebugMode) {
-        sendDebugLog('net', `-> [${details.method}] ${url}`);
+        sendDebugLog('net', `-> [${details.method}] ${redactedUrl(url)}`);
       }
 
       if (host.includes('anixart') || host.includes('anixsekai')) {
@@ -617,7 +556,7 @@ function createWindow() {
   mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     const { responseHeaders, statusCode, url } = details;
     if (isDebugMode) {
-      sendDebugLog('net', `<- [${statusCode}] ${url}`);
+      sendDebugLog('net', `<- [${statusCode}] ${redactedUrl(url)}`);
     }
     UpsertKeyValue(responseHeaders, 'Access-Control-Allow-Origin', ['*']);
     UpsertKeyValue(responseHeaders, 'Access-Control-Allow-Headers', ['*']);
@@ -636,9 +575,9 @@ app.on('ready', () => {
   }
 
   if (process.platform === 'win32') {
-    app.setAppUserModelId('com.mjkey.anixflow');
+    app.setAppUserModelId('app.anixartix.desktop');
   }
-  initDownloader();
+  initDownloader(handleTrusted);
   createTray();
   createWindow();
   if (isDebugMode) {
@@ -663,8 +602,28 @@ app.on('activate', function () {
   if (mainWindow === null) createWindow();
 });
 
-ipcMain.handle("analytics:trackEvent", () => {});
-ipcMain.handle("power:sleep", () => {
+handleTrusted("analytics:trackEvent", () => {});
+let powerConfirmationPending = false;
+async function confirmPowerAction(action) {
+  if (powerConfirmationPending || !mainWindow || mainWindow.isDestroyed()) return false;
+  powerConfirmationPending = true;
+  try {
+    const result = await dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      buttons: ['Отмена', action === 'sleep' ? 'Перевести в сон' : 'Выключить компьютер'],
+      defaultId: 0,
+      cancelId: 0,
+      title: 'Подтвердите действие',
+      message: action === 'sleep' ? 'Перевести компьютер в спящий режим?' : 'Выключить компьютер сейчас?',
+      detail: 'Несохранённые данные в других приложениях могут быть потеряны.'
+    });
+    return result.response === 1;
+  } finally {
+    powerConfirmationPending = false;
+  }
+}
+handleTrusted("power:sleep", async () => {
+  if (!await confirmPowerAction('sleep')) return false;
   const { execFile } = require('child_process');
   if (process.platform === 'win32') {
     execFile('rundll32.exe', ['powrprof.dll,SetSuspendState', '0,1,0']);
@@ -674,7 +633,8 @@ ipcMain.handle("power:sleep", () => {
     execFile('pmset', ['sleepnow']);
   }
 });
-ipcMain.handle("power:shutdown", () => {
+handleTrusted("power:shutdown", async () => {
+  if (!await confirmPowerAction('shutdown')) return false;
   const { execFile } = require('child_process');
   if (process.platform === 'win32') {
     execFile('shutdown.exe', ['/s', '/t', '0']);
@@ -685,9 +645,9 @@ ipcMain.handle("power:shutdown", () => {
   }
 });
 
-ipcMain.handle('netElec:fetch', async (event, url, requestInfo) => {
-  if (!url || typeof url !== 'string') {
-    throw new Error('Invalid URL provided');
+handleTrusted('netElec:fetch', async (event, url, requestInfo) => {
+  if (!isHttpUrl(url)) {
+    throw new Error('Invalid HTTP URL provided');
   }
   const parsed = new URL(url);
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
@@ -708,31 +668,31 @@ ipcMain.handle('netElec:fetch', async (event, url, requestInfo) => {
   };
 });
 
-ipcMain.handle("app:quit", () => {
+handleTrusted("app:quit", () => {
   isQuitting = true;
   app.quit();
 });
 
-ipcMain.handle("settings:get", (_, key) => settingsManager.get(key));
+handleTrusted("settings:get", (_, key) => settingsManager.get(key));
 
-ipcMain.handle("settings:set", (_, key, value) => {
+handleTrusted("settings:set", (_, key, value) => {
   settingsManager.set(key, value);
 });
 
-ipcMain.handle("settings:getAll", (_) => settingsManager.getAll());
+handleTrusted("settings:getAll", (_) => settingsManager.getAll());
 
-ipcMain.handle("proxy:toggle", (_, enabled) => {
+handleTrusted("proxy:toggle", (_, enabled) => {
   const current = settingsManager.get("EnableCdnProxy") ?? false;
   const newValue = enabled !== undefined ? !!enabled : !current;
   settingsManager.set("EnableCdnProxy", newValue);
   return newValue;
 });
 
-ipcMain.handle("window:minimize", (_) => {
+handleTrusted("window:minimize", (_) => {
   mainWindow.minimize();
 });
 
-ipcMain.handle("window:maximize", (_) => {
+handleTrusted("window:maximize", (_) => {
   if (!mainWindow) return;
   if (mainWindow.isFullScreen()) {
     mainWindow.setFullScreen(false);
@@ -743,7 +703,7 @@ ipcMain.handle("window:maximize", (_) => {
   }
 });
 
-ipcMain.handle("window:close", (_) => {
+handleTrusted("window:close", (_) => {
   const minimizeToTray = settingsManager.get('MinimizeToTray');
 
   if (!isQuitting && minimizeToTray && mainWindow) {
@@ -753,33 +713,33 @@ ipcMain.handle("window:close", (_) => {
   }
 });
 
-ipcMain.handle("window:getSize", (_) => {
+handleTrusted("window:getSize", (_) => {
   return mainWindow ? mainWindow.getSize() : [1280, 720];
 });
 
-ipcMain.handle("window:isFullScreen", (_) => {
+handleTrusted("window:isFullScreen", (_) => {
   return mainWindow ? mainWindow.isFullScreen() : false;
 });
 
-ipcMain.handle("window:enterFullScreen", (_) => {
+handleTrusted("window:enterFullScreen", (_) => {
   if (mainWindow) mainWindow.setFullScreen(true);
 });
 
-ipcMain.handle("window:leaveFullScreen", (_) => {
+handleTrusted("window:leaveFullScreen", (_) => {
   if (mainWindow) mainWindow.setFullScreen(false);
 });
 
-ipcMain.handle("sibnet:parse", async (_, link) => {
+handleTrusted("sibnet:parse", async (_, link) => {
   const res = await SibnetParser.getDirectLink(link);
   return res;
 });
 
-ipcMain.handle("winApi:openLink", (_, link) => {
-  if (!link || typeof link !== 'string') return false;
+handleTrusted("winApi:openLink", (_, link) => {
+  if (!isHttpUrl(link)) return false;
   try {
     const parsed = new URL(link);
     if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-      shell.openExternal(link);
+      shell.openExternal(link).catch((error) => console.error('Could not open external link:', error.message));
       return true;
     }
   } catch (e) {
@@ -788,7 +748,7 @@ ipcMain.handle("winApi:openLink", (_, link) => {
   return false;
 });
 
-ipcMain.handle("discordRPC:setActivity", (_, activity) => {
+handleTrusted("discordRPC:setActivity", (_, activity) => {
   if (SettingsFirst.EnableRPC) {
     discordRpcClient.user?.setActivity(activity).then(() => {
       if (isDebugMode) console.log("[DEBUG] [RPC] Activity set!");
@@ -796,13 +756,13 @@ ipcMain.handle("discordRPC:setActivity", (_, activity) => {
   }
 });
 
-ipcMain.handle("discordRPC:clearActivity", (_) => {
+handleTrusted("discordRPC:clearActivity", (_) => {
   if (SettingsFirst.EnableRPC) {
     discordRpcClient.user?.clearActivity().catch(console.error);
   }
 });
 
-ipcMain.handle("prc:getVersions", (_) => {
+handleTrusted("prc:getVersions", (_) => {
   return {
     chrome: process.versions.chrome,
     electron: process.versions.electron,
@@ -812,13 +772,13 @@ ipcMain.handle("prc:getVersions", (_) => {
   };
 });
 
-ipcMain.handle("prc:isDebug", (_) => isDebugMode);
+handleTrusted("prc:isDebug", (_) => isDebugMode);
 
-ipcMain.handle("notify:send", (_, { title, body, releaseId }) => {
+handleTrusted("notify:send", (_, { title, body, releaseId }) => {
   if (!Notification.isSupported()) return false;
-  const iconPath = path.join(__dirname, 'public', 'assets', 'icons', 'anixflow-icon.png');
+  const iconPath = path.join(__dirname, '..', 'public', 'assets', 'icons', 'anixflow-icon.png');
   const notif = new Notification({
-    title: title || 'AniXFlow',
+    title: title || APP_NAME,
     body: body || '',
     icon: fs.existsSync(iconPath) ? iconPath : undefined
   });
@@ -851,50 +811,28 @@ function compareVersions(v1, v2) {
   return 0;
 }
 
-ipcMain.handle("updater:check", async (_) => {
-  broadcastUpdaterStatus({ status: "checking", text: "Проверка обновлений..." });
-
-  if (app.isPackaged) {
-    try {
-      autoUpdater.checkForUpdates();
-      return updateStatusCache;
-    } catch (e) {
-      console.error("Squirrel check error, fallback to GitHub:", e);
-    }
-  }
-
-  const ghStatus = await checkForUpdatesGitHub();
-  broadcastUpdaterStatus(ghStatus);
-  return ghStatus;
+handleTrusted("updater:check", () => {
+  const status = disabledUpdateStatus();
+  broadcastUpdaterStatus(status);
+  return status;
 });
 
-ipcMain.handle("updater:install", async (_) => {
-  if (app.isPackaged) {
-    try {
-      isQuitting = true;
-      autoUpdater.quitAndInstall();
-      return true;
-    } catch (e) {
-      console.error("quitAndInstall error:", e);
-    }
-  }
-  return false;
-});
+handleTrusted("updater:install", () => false);
 
-ipcMain.handle("debug:send", (_, { type, message, data }) => {
+handleTrusted("debug:send", (_, { type, message, data }) => {
   sendDebugLog(type, message, data);
 });
 
-ipcMain.handle("shikimori:exchangeCode", async (_, { authCode, domain, clientId, clientSecret }) => {
-  if (!authCode) return null;
+handleTrusted("shikimori:exchangeCode", async (_, { authCode, domain, clientId }) => {
+  if (typeof authCode !== 'string' || !authCode.trim() || authCode.length > 8192) return null;
 
   const SHIKI_CLIENT_ID = clientId || process.env.SHIKIMORI_CLIENT_ID || '';
-  const SHIKI_CLIENT_SECRET = clientSecret || process.env.SHIKIMORI_CLIENT_SECRET || '';
+  const SHIKI_CLIENT_SECRET = process.env.SHIKIMORI_CLIENT_SECRET || '';
   const SHIKI_REDIRECT_URI = "urn:ietf:wg:oauth:2.0:oob";
-  const userAgent = "AniXFlowApp/1.1 (Desktop; Windows; https://github.com/MjKey/AniXFlow)";
+  const userAgent = `${APP_NAME}/${app.getVersion()} (Desktop; ${process.platform})`;
 
   try {
-    const tokenUrl = `https://${domain || 'shikimori.io'}/oauth/token`;
+    const tokenUrl = shikimoriTokenUrl(domain || 'shikimori.io');
     const params = new URLSearchParams({
       grant_type: "authorization_code",
       client_id: SHIKI_CLIENT_ID,
@@ -905,6 +843,7 @@ ipcMain.handle("shikimori:exchangeCode", async (_, { authCode, domain, clientId,
 
     let res = await net.fetch(tokenUrl, {
       method: "POST",
+      redirect: "error",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         "User-Agent": userAgent
@@ -915,6 +854,7 @@ ipcMain.handle("shikimori:exchangeCode", async (_, { authCode, domain, clientId,
     if (!res.ok) {
       res = await net.fetch(tokenUrl, {
         method: "POST",
+        redirect: "error",
         headers: {
           "Content-Type": "application/json",
           "User-Agent": userAgent
@@ -930,8 +870,7 @@ ipcMain.handle("shikimori:exchangeCode", async (_, { authCode, domain, clientId,
     }
 
     if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      console.error(`Shikimori exchangeCode HTTP ${res.status}:`, errText);
+      console.error(`Shikimori exchangeCode HTTP ${res.status}`);
       return null;
     }
     return await res.json();
@@ -941,15 +880,15 @@ ipcMain.handle("shikimori:exchangeCode", async (_, { authCode, domain, clientId,
   }
 });
 
-ipcMain.handle("shikimori:refreshToken", async (_, { refreshToken, domain, clientId, clientSecret }) => {
-  if (!refreshToken) return null;
+handleTrusted("shikimori:refreshToken", async (_, { refreshToken, domain, clientId }) => {
+  if (typeof refreshToken !== 'string' || !refreshToken.trim() || refreshToken.length > 16384) return null;
 
   const SHIKI_CLIENT_ID = clientId || process.env.SHIKIMORI_CLIENT_ID || '';
-  const SHIKI_CLIENT_SECRET = clientSecret || process.env.SHIKIMORI_CLIENT_SECRET || '';
-  const userAgent = "AniXFlowApp/1.1 (Desktop; Windows; https://github.com/MjKey/AniXFlow)";
+  const SHIKI_CLIENT_SECRET = process.env.SHIKIMORI_CLIENT_SECRET || '';
+  const userAgent = `${APP_NAME}/${app.getVersion()} (Desktop; ${process.platform})`;
 
   try {
-    const tokenUrl = `https://${domain || 'shikimori.io'}/oauth/token`;
+    const tokenUrl = shikimoriTokenUrl(domain || 'shikimori.io');
     const params = new URLSearchParams({
       grant_type: "refresh_token",
       client_id: SHIKI_CLIENT_ID,
@@ -959,6 +898,7 @@ ipcMain.handle("shikimori:refreshToken", async (_, { refreshToken, domain, clien
 
     let res = await net.fetch(tokenUrl, {
       method: "POST",
+      redirect: "error",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         "User-Agent": userAgent
@@ -969,6 +909,7 @@ ipcMain.handle("shikimori:refreshToken", async (_, { refreshToken, domain, clien
     if (!res.ok) {
       res = await net.fetch(tokenUrl, {
         method: "POST",
+        redirect: "error",
         headers: {
           "Content-Type": "application/json",
           "User-Agent": userAgent
@@ -983,8 +924,7 @@ ipcMain.handle("shikimori:refreshToken", async (_, { refreshToken, domain, clien
     }
 
     if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      console.error(`Shikimori refreshToken HTTP ${res.status}:`, errText);
+      console.error(`Shikimori refreshToken HTTP ${res.status}`);
       return null;
     }
     return await res.json();
@@ -994,7 +934,7 @@ ipcMain.handle("shikimori:refreshToken", async (_, { refreshToken, domain, clien
   }
 });
 
-ipcMain.handle("download:episode", async (event, { url, defaultFileName, referer }) => {
+handleTrusted("download:episode", async (event, { url, defaultFileName, referer }) => {
   if (!url) return { success: false, error: "No URL provided" };
 
   try {
@@ -1191,7 +1131,15 @@ async function handleAnixflowRequest(request) {
       return new Response('File not found', { status: 404 });
     }
 
-    const stat = fs.statSync(filePath);
+    const storageRoot = await fs.promises.realpath(path.join(app.getPath('userData'), 'offline_storage'));
+    const realFilePath = await fs.promises.realpath(filePath);
+    const relativePath = path.relative(storageRoot, realFilePath);
+    if (!relativePath || relativePath === '..' || relativePath.startsWith(`..${path.sep}`) || path.isAbsolute(relativePath)) {
+      return new Response('Forbidden', { status: 403 });
+    }
+    filePath = realFilePath;
+    const stat = await fs.promises.stat(filePath);
+    if (!stat.isFile()) return new Response('Not a file', { status: 400 });
     const fileSize = stat.size;
     const rangeHeader = request.headers ? (request.headers.get ? request.headers.get('range') : request.headers['range']) : null;
 
@@ -1207,7 +1155,7 @@ async function handleAnixflowRequest(request) {
         end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
       }
 
-      if (isNaN(start) || start >= fileSize) {
+      if (!Number.isSafeInteger(start) || start < 0 || start >= fileSize || !Number.isSafeInteger(end) || end < start) {
         return new Response(null, {
           status: 416,
           headers: { 'Content-Range': `bytes */${fileSize}` }

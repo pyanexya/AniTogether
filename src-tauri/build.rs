@@ -1,0 +1,51 @@
+fn main() {
+    #[cfg(feature = "desktop")]
+    if std::env::var_os("CARGO_FEATURE_DESKTOP").is_some() {
+        tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
+            tauri_build::AppManifest::new().commands(&[
+                "media_open",
+                "media_close",
+                "window_minimize",
+                "window_maximize",
+                "window_close",
+                "window_start_dragging",
+                "window_get_size",
+                "window_is_fullscreen",
+                "window_enter_fullscreen",
+                "window_leave_fullscreen",
+                "app_quit",
+                "power_sleep",
+                "power_shutdown",
+                "discord_set",
+                "discord_clear",
+                "runtime_versions",
+                "runtime_debug",
+                "open_link",
+                "notify_send",
+                "debug_send",
+                "updater_check",
+                "updater_install",
+                "settings_get_all",
+                "settings_get",
+                "settings_set",
+                "proxy_toggle",
+                "net_fetch",
+                "oauth_exchange",
+                "oauth_refresh",
+                "sibnet_parse",
+                "offline_open",
+                "offline_get_library",
+                "offline_get_active_downloads",
+                "offline_download_episode",
+                "offline_pause_download",
+                "offline_resume_download",
+                "offline_retry_download",
+                "offline_cancel_download",
+                "offline_delete_episode",
+                "offline_open_folder",
+                "download_episode",
+            ]),
+        ))
+        .expect("Tauri build configuration failed");
+    }
+}

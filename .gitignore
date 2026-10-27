@@ -22,3 +22,11 @@ anixart-oapi.json
 !README.md
 !README.MD
 !readme.md
+# Fork documentation is part of the corresponding source distribution.
+!FORK-NOTICE.md
+!server/README.md
+!docs/UPSTREAM-README.md
+
+# Rust/Tauri generated outputs
+src-tauri/target/
+src-tauri/gen/

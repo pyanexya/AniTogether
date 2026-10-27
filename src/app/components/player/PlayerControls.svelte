@@ -2,6 +2,7 @@
     import { createEventDispatcher } from "svelte";
 
     export let video = null;
+    export let playbackLocked = false;
     export let isPaused = false;
     export let currentTime = "00:00";
     export let durationTime = "00:00";
@@ -21,6 +22,7 @@
     const dispatch = createEventDispatcher();
 
     function togglePlay(e) {
+        if (playbackLocked) return;
         if (video) {
             video.paused ? video.play() : video.pause();
             e.currentTarget.blur();
@@ -57,6 +59,7 @@
     }
 
     async function handleNextEpisode() {
+        if (playbackLocked) return;
         const idx = episodes.findIndex((x) => x.position == cEpisode.position);
         const nextEp = episodes[idx + 1];
         if (nextEp && playVideo) {
@@ -191,16 +194,17 @@
 <!-- Bottom Navigation Bar -->
 <div class="bottom-content container flex-row">
     <div class="left-content flex-row">
-        <button class="player-bottom-button" onclick={(e) => { e.stopPropagation(); dispatch("showEpisodesDropdown", e); }}>
+        <button class="player-bottom-button" disabled={playbackLocked} onclick={(e) => { e.stopPropagation(); dispatch("showEpisodesDropdown", e); }}>
             <img src="./assets/icons/episodeIcon.svg" alt="episode" />
             <span>Серии</span>
         </button>
-        <button class="player-bottom-button" onclick={(e) => { e.stopPropagation(); dispatch("showDubbersDropdown", e); }}>
+        <button class="player-bottom-button" disabled={playbackLocked} onclick={(e) => { e.stopPropagation(); dispatch("showDubbersDropdown", e); }}>
             <img src="./assets/icons/dubbersIcon.svg" width="22px" alt="dubbers" />
             <span>Озвучка</span>
         </button>
         <button
             class="player-bottom-button"
+            disabled={playbackLocked || !release?.related_count}
             class:bottom-disabled={!release?.related_count}
             onclick={(e) => {
                 e.stopPropagation();
@@ -215,6 +219,7 @@
         <slot name="skip-controls" />
         <button
             class="player-bottom-button"
+            disabled={playbackLocked || cEpisode?.position == episodes.length}
             class:bottom-disabled={cEpisode?.position == episodes.length}
             onclick={handleNextEpisode}
         >
@@ -227,6 +232,7 @@
 </div>
 
 <style>
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
     .container {
         width: 100%;
     }

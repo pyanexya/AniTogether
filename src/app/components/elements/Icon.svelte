@@ -4,7 +4,7 @@
     export let varColor;
     export let size = {
         width: 20,
-        heigth: 20,
+        height: 20,
     };
 
     export let viewBox = extractViewBox(src);
@@ -22,7 +22,7 @@
 <svg
     xmlns="http://www.w3.org/2000/svg"
     width={size.width}
-    heigth={size.heigth}
+    height={size.height ?? size.heigth ?? 20}
     {viewBox}
     style="--color: {varColor ? `var(${varColor})` : `${color}`}"
 >

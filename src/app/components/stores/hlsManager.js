@@ -38,21 +38,21 @@ export class HlsManager {
                     const netErrType = Hls.ErrorTypes?.NETWORK_ERROR || "networkError";
                     const mediaErrType = Hls.ErrorTypes?.MEDIA_ERROR || "mediaError";
                     if (data.type === netErrType) {
-                        console.warn("[HlsManager] Fatal HLS network error encountered, recovering with startLoad()", data);
+                        console.warn("[HlsManager] Fatal HLS network error encountered, recovering with startLoad()");
                         try {
                             this._hls.startLoad();
                         } catch (e) {
-                            console.error("[HlsManager] Error calling startLoad():", e);
+                            console.error("[HlsManager] Error calling startLoad():");
                         }
                     } else if (data.type === mediaErrType) {
-                        console.warn("[HlsManager] Fatal HLS media error encountered, recovering with recoverMediaError()", data);
+                        console.warn("[HlsManager] Fatal HLS media error encountered, recovering with recoverMediaError()");
                         try {
                             this._hls.recoverMediaError();
                         } catch (e) {
-                            console.error("[HlsManager] Error calling recoverMediaError():", e);
+                            console.error("[HlsManager] Error calling recoverMediaError():");
                         }
                     } else {
-                        console.error("[HlsManager] Unrecoverable fatal HLS error:", data);
+                        console.error("[HlsManager] Unrecoverable fatal HLS error:");
                         this.destroy();
                     }
                 }
@@ -80,10 +80,10 @@ export class HlsManager {
      * @param {string} url
      * @param {boolean} [autoPlay=true]
      */
-    loadSource(url, autoPlay = true) {
+    loadSource(url, autoPlay = true, explicitHls = null) {
         if (!this._video) return;
 
-        const isHls = HlsManager.isHlsUrl(url);
+        const isHls = explicitHls ?? HlsManager.isHlsUrl(url);
 
         if (isHls) {
             this._createHlsInstance();
@@ -94,7 +94,7 @@ export class HlsManager {
                     this._hls.once(Hls.Events.MANIFEST_PARSED, () => {
                         if (this._video) {
                             this._video.play().catch((e) => {
-                                console.warn("[HlsManager] Autoplay error after manifest parsed:", e);
+                                console.warn("[HlsManager] Autoplay error after manifest parsed:");
                             });
                         }
                     });
@@ -107,7 +107,7 @@ export class HlsManager {
                 const onMetadata = () => {
                     if (this._video) {
                         this._video.play().catch((e) => {
-                            console.warn("[HlsManager] Autoplay error:", e);
+                            console.warn("[HlsManager] Autoplay error:");
                         });
                     }
                 };
@@ -124,11 +124,11 @@ export class HlsManager {
      * Переключить качество видео с сохранением текущей позиции
      * @param {string} qualityUrl
      */
-    changeQuality(qualityUrl) {
+    changeQuality(qualityUrl, explicitHls = null) {
         if (!this._video) return;
 
         const url = qualityUrl.startsWith('//') ? `https:${qualityUrl}` : qualityUrl;
-        const isHls = HlsManager.isHlsUrl(url);
+        const isHls = explicitHls ?? HlsManager.isHlsUrl(url);
 
         if (isHls) {
             const currentTime = this._video.currentTime || 0;
@@ -159,7 +159,7 @@ export class HlsManager {
                 try {
                     videoEl.currentTime = currentTime;
                 } catch (e) {
-                    console.error("[HlsManager] Error setting currentTime:", e);
+                    console.error("[HlsManager] Error setting currentTime:");
                 }
                 if (!isPausedNow) {
                     videoEl.play().catch(() => {});
@@ -183,7 +183,7 @@ export class HlsManager {
                 this._hls.detachMedia();
                 this._hls.destroy();
             } catch (e) {
-                console.error("Error destroying HLS:", e);
+                console.error("Error destroying HLS:");
             }
             this._hls = null;
         }

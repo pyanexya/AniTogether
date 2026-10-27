@@ -48,6 +48,11 @@ export class SleepTimer {
     async executeAction() {
         this.clear();
         const action = this.getAction();
+        if (["sleep", "shutdown"].includes(action) && window.nativePlatform?.capabilities.power === false) {
+            this.handlers.pause?.();
+            window.alert('Видео приостановлено. Сон и выключение компьютера пока недоступны в версии Tauri. Измените действие таймера в настройках.');
+            return;
+        }
 
         switch (action) {
             case "pause":

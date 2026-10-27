@@ -83,20 +83,19 @@
     }
 
     async function handleExchangeShikiCode() {
-        if (!shikiAuthCodeInput.trim()) return;
+        if (!shikiAuthCodeInput.trim() || isCheckingShiki) return;
         isCheckingShiki = true;
         shikiCheckStatus = { type: "info", text: "Обмен кода авторизации на токен доступа..." };
-
-        const tokenData = await exchangeShikimoriCode(shikiAuthCodeInput);
-        if (tokenData && tokenData.access_token) {
-            if (tokenData.refresh_token) {
-                localStorage.setItem("shikimori_refresh_token", tokenData.refresh_token);
-            }
+        try {
+            const tokenData = await exchangeShikimoriCode(shikiAuthCodeInput.trim());
+            if (!tokenData?.access_token) throw new Error("Не удалось обменять код авторизации. Проверьте код и повторите попытку.");
+            if (tokenData.refresh_token) localStorage.setItem("shikimori_refresh_token", tokenData.refresh_token);
             await checkAndSaveShikimoriToken(tokenData.access_token);
             shikiAuthCodeInput = "";
-        } else {
+        } catch (error) {
+            shikiCheckStatus = { type: "error", text: String(error?.message || error) };
+        } finally {
             isCheckingShiki = false;
-            shikiCheckStatus = { type: "error", text: "Не удалось обменять код авторизации. Проверьте код и повторите попытку." };
         }
     }
 
@@ -134,7 +133,7 @@
     {#if isDebug}
         <InfoElement
             title="Debug Mode Активен"
-            description="Приложение запущенно с флагом --debug (DevTools и расширенный лог)"
+            description="Запущена отладочная сборка Tauri. Диагностические события доступны в консоли клиента."
             type="info"
         />
     {/if}
@@ -150,35 +149,39 @@
 
     <CheckboxElement
         title="Уведомления о новых сериях"
-        description="Присылать системные уведомления Windows о выходе новых серий для аниме в Избранном."
+        description={window.nativePlatform?.capabilities.notificationNavigation === false ? "Системные уведомления о новых сериях. Переход к релизу по нажатию пока недоступен." : "Присылать системные уведомления Windows о выходе новых серий для аниме в Избранном."}
         value={baseSettings?.EnableEpisodeNotifications ?? true}
         onChangeCallback={(e) => updateMainKey("EnableEpisodeNotifications", e)}
     />
 
     <CheckboxElement
         title="Включить автообновление"
-        description="Приложение будет автоматически проверять и устанавливать обновления при их наличии."
-        value={baseSettings?.AutoUpdate ?? true}
+        description="Автообновления отключены: доверенный канал AnixArtix ещё не настроен."
+        disabled={true}
+        value={false}
         onChangeCallback={(e) => updateMainKey("AutoUpdate", e)}
     />
 
     <CheckboxElement
         title="Включить Discord RPC"
-        description="Отображает текущий статус просмотра в вашем профиле Discord."
+        description={window.nativePlatform?.capabilities.discord === false ? "Discord RPC пока недоступен в версии Tauri." : "Отображает текущий статус просмотра в вашем профиле Discord."}
+        disabled={window.nativePlatform?.capabilities.discord === false}
         value={baseSettings?.EnableRPC ?? false}
         onChangeCallback={(e) => updateMainKey("EnableRPC", e)}
     />
 
     <CheckboxElement
         title="Включить DevTools"
-        description="Позволяет использовать DevTools в приложении."
+        description={window.nativePlatform?.capabilities.devtools === false ? "Переключение DevTools из интерфейса пока недоступно в Tauri." : "Позволяет использовать DevTools в приложении."}
+        disabled={window.nativePlatform?.capabilities.devtools === false}
         value={baseSettings?.EnableDevTools ?? false}
         onChangeCallback={(e) => updateMainKey("EnableDevTools", e)}
     />
 
     <CheckboxElement
         title="Включить CDN Прокси"
-        description="Обход блокировок и проксирование постеров аниме через CDN."
+        description={window.nativePlatform?.capabilities.cdnProxy === false ? "CDN-прокси постеров пока недоступен в Tauri. Изображения загружаются напрямую." : "Обход блокировок и проксирование постеров аниме через CDN."}
+        disabled={window.nativePlatform?.capabilities.cdnProxy === false}
         value={baseSettings?.EnableCdnProxy ?? false}
         onChangeCallback={(e) => {
             if (window.proxy?.toggle) {

@@ -7,7 +7,6 @@ import css from 'rollup-plugin-css-only';
 import json from '@rollup/plugin-json';
 import { spawn } from 'child_process';
 import { string } from 'rollup-plugin-string';
-import svgo from 'rollup-plugin-svgo';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -41,6 +40,7 @@ function loadEnv() {
 
 const envVars = loadEnv();
 
+// Only the public client ID is embedded. OAuth secrets stay in the main process.
 function envPlugin() {
     return {
         name: 'env-replace',
@@ -48,7 +48,7 @@ function envPlugin() {
             if (!id.includes('node_modules')) {
                 let replaced = code
                     .replace(/__ENV_SHIKIMORI_CLIENT_ID__/g, JSON.stringify(envVars.SHIKIMORI_CLIENT_ID || ''))
-                    .replace(/__ENV_SHIKIMORI_CLIENT_SECRET__/g, JSON.stringify(envVars.SHIKIMORI_CLIENT_SECRET || ''));
+                    .replace(/__ENV_SHIKIMORI_CLIENT_SECRET__/g, JSON.stringify(''));
                 return { code: replaced, map: null };
             }
         }
@@ -79,12 +79,14 @@ function serve() {
 export default {
     input: 'src/app/app.js',
     output: {
-        sourcemap: true,
-        format: 'iife',
-        name: 'anideskMain',
-        file: 'public/build/bundle.js'
+        sourcemap: !production,
+        format: 'es',
+        dir: 'public/build',
+        entryFileNames: 'bundle.js',
+        chunkFileNames: 'chunks/[name]-[hash].js'
     },
     plugins: [
+        { name: 'clean-generated-build', buildStart() { if (production) fs.rmSync(path.resolve(__dirname, 'public/build'), { recursive: true, force: true }); } },
         envPlugin(),
         svelte({
             compilerOptions: {
@@ -95,13 +97,13 @@ export default {
                 handler(warning);
             }
         }),
-        svgo(),
         resolve({
             browser: true,
+            exportConditions: ['svelte'],
             dedupe: ['svelte']
         }),
         string({
-            include: 'src/icons/*.svg',
+            include: '**/*.svg',
         }),
         css({ output: 'bundle.css' }),
         json(),
@@ -109,7 +111,7 @@ export default {
         !production && serve(),
         !production && livereload('public'),
         production && !fastBuild && terser({
-            maxWorkers: Math.max(1, Math.floor(os.cpus().length / 2))
+            maxWorkers: Math.max(1, Math.min(2, Math.floor(os.cpus().length / 2)))
         }),
     ],
     watch: {

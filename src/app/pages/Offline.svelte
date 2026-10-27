@@ -2,90 +2,68 @@
     import AnimeColumnCard from "../components/elements/AnimeColumnCard.svelte";
     import MetaInfo from "../components/gui/MetaInfo.svelte";
     import Preloader from "../components/gui/Preloader.svelte";
-    import utils from "../utils";
     import OfflineRelease from "./OfflineRelease.svelte";
-
     import { onMount } from "svelte";
-    import { downloadProgressStore } from "../components/stores/downloadProgressStore";
+    import { createOfflineController, downloadState } from "../platform/downloads.js";
 
-    let library = offlineApi.getLibrary();
-    let activeDownloads = [];
-    $: progresses = $downloadProgressStore;
-
-    onMount(async () => {
-        activeDownloads = await offlineApi.getActiveDownloads();
-    });
-
-    function openFolder() {
-        offlineApi.openFolder();
-    }
-    
-    $: activeAnime = Object.values(activeDownloads.reduce((acc, d) => {
-        if (!acc[d.animeMeta.id]) {
-            acc[d.animeMeta.id] = { ...d.animeMeta, episodes_count: 0, activeEpId: d.episodeMeta.id, downloadId: d.downloadId };
-        }
-        return acc;
-    }, {}));
-
+    let state = { library: [], jobs: [], loading: true, error: '', busy: [] };
+    const controller = createOfflineController(window.offlineApi, value => { state = value; });
+    onMount(() => { controller.start(); return () => controller.dispose(); });
 </script>
 
 <MetaInfo subTitle="Загрузки" />
-
-<div class="releases-type flex-row" tabindex="-1">
-    <button class="releases-type-title flex-column selected">Скачанное</button>
-</div>
-<div tabindex="-1" class="releases-container flex-column">
+<div class="releases-type flex-row"><span class="releases-type-title selected">Загрузки и офлайн-библиотека</span></div>
+<div class="releases-container flex-column">
     <div class="flex-row releases-title">
-        <span>Загруженные видео для офлайн просмотра</span>
-        <button class="open-folder-btn" onclick={openFolder}>Открыть папку</button>
+        <span>Скачанные серии доступны без интернета</span>
+        <button class="open-folder-btn" onclick={() => controller.openFolder()}>Открыть папку</button>
     </div>
-    {#await library}
-        <Preloader />
-    {:then Releases}
-        {#if Releases.length === 0 && activeAnime.length === 0}
-            <div class="empty-state">У вас пока нет скачанных серий.</div>
-        {:else}
-            <div class="cards-grid">
-                {#each activeAnime as anime}
-                    {@const p = progresses[anime.downloadId] ?? anime.percent ?? 0}
-                    {@const libAnime = Releases.find(r => r.id === anime.id)}
-                    <AnimeColumnCard 
-                        onClickOverride={() => updateViewportComponent(OfflineRelease, { anime: { id: anime.id, title_ru: anime.title_ru || anime.title || anime.name, image: anime.image, episodes: libAnime?.episodes || [] } })}
-                        anime={{
-                        id: anime.id,
-                        title_ru: anime.title_ru || anime.title || anime.name || 'Загрузка...',
-                        image: anime.image,
-                        episodes_released: libAnime?.episodes?.length || 0,
-                        episodes_total: libAnime?.episodes?.length || 0,
-                        grade: anime.grade ?? null,
-                        status: anime.status ?? null,
-                        profile_list_status: anime.profile_list_status ?? 0
-                    }}>
-                        <div style="color: #4CAF50; font-size: 13px; margin-top: -5px; margin-bottom: 5px; font-weight: bold; display: flex; align-items: center;">
-                            Загрузка: {Math.round(p)}%
-                        </div>
-                    </AnimeColumnCard>
-                {/each}
-                {#each Releases.filter(r => !activeAnime.find(a => a.id === r.id)) as Release}
-                    <AnimeColumnCard 
-                        onClickOverride={() => updateViewportComponent(OfflineRelease, { anime: Release })}
-                        anime={{
-                        id: Release.id,
-                        title_ru: Release.title_ru || Release.title || Release.name || 'Без названия',
-                        image: Release.image,
-                        episodes_released: Release.episodes?.length || 0,
-                        episodes_total: Release.episodes?.length || 0,
-                        grade: Release.grade ?? null,
-                        status: Release.status ?? null,
-                        profile_list_status: Release.profile_list_status ?? 0
-                    }} />
-                {/each}
-            </div>
-        {/if}
-    {/await}
+    {#if state.error}<div class="download-error" role="alert">{state.error}<button onclick={() => controller.refresh()}>Обновить</button></div>{/if}
+    {#if state.loading}<Preloader />{/if}
+    {#if state.jobs.length}
+        <section class="download-jobs" aria-label="Очередь загрузок">
+            {#each state.jobs as job (job.downloadId)}
+                {@const progress = downloadState(job)}
+                {@const busy = state.busy.includes(job.downloadId)}
+                <article class="download-job">
+                    <div class="job-info">
+                        <strong>{job.animeMeta.title_ru || job.animeMeta.title || 'Аниме'} · {job.episodeMeta.title || `Серия ${job.episodeMeta.id}`}</strong>
+                        <span class:error={progress.status === 'error'}>{progress.label}</span>
+                        {#if job.error}<span class="error">{job.error}</span>{/if}
+                        {#if progress.status === 'downloading'}<progress max="100" value={Math.max(0, Math.min(100, job.percent || 0))} aria-label="Прогресс загрузки" />{/if}
+                    </div>
+                    <div class="job-actions">
+                        {#if progress.canPause}<button disabled={busy} onclick={() => controller.action('pause', job)}>Пауза</button>{/if}
+                        {#if progress.canResume}<button disabled={busy} onclick={() => controller.action('resume', job)}>Продолжить</button>{/if}
+                        {#if progress.canRetry}<button disabled={busy} onclick={() => controller.action('retry', job)}>Повторить</button>{/if}
+                        <button disabled={busy} onclick={() => controller.action('cancel', job)}>Отменить</button>
+                    </div>
+                </article>
+            {/each}
+        </section>
+    {/if}
+    {#if !state.loading && state.library.length === 0 && state.jobs.length === 0}<div class="empty-state">У вас пока нет скачанных серий.</div>{/if}
+    <div class="cards-grid">
+        {#each state.library as release (release.id)}
+            <AnimeColumnCard
+                onClickOverride={() => updateViewportComponent(OfflineRelease, { anime: release })}
+                anime={{ ...release, title_ru: release.title_ru || release.title || release.name || 'Без названия', episodes_released: release.episodes?.length || 0, episodes_total: release.episodes?.length || 0, grade: release.grade ?? null, status: release.status ?? null, profile_list_status: release.profile_list_status ?? 0 }} />
+        {/each}
+    </div>
 </div>
 
 <style>
+    .download-jobs { margin:20px; display:grid; gap:12px; }
+    .download-job { display:flex; flex-wrap:wrap; align-items:center; gap:16px; padding:16px; border:1px solid var(--border-color); background:var(--alt-background-color); border-radius:14px; }
+    .job-info { flex:1; min-width:180px; display:grid; gap:8px; overflow-wrap:anywhere; }
+    .job-info span { font-size:13px; color:var(--secondary-text-color); }
+    .job-info .error, .download-error { color:var(--warning-color, #ff7b82); }
+    .job-actions { display:flex; flex-wrap:wrap; gap:8px; }
+    .job-actions button, .download-error button { padding:8px 12px; background:var(--hover-color); color:var(--main-text-color); border-radius:8px; }
+    button:disabled { opacity:.45; cursor:wait; }
+    progress { width:100%; accent-color:var(--select-button-color); height:6px; }
+    .download-error { margin:20px; display:flex; align-items:center; gap:16px; overflow-wrap:anywhere; }
+
     .empty-state {
         display: flex;
         justify-content: center;

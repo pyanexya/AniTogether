@@ -39,7 +39,7 @@
             updateStatus = {
                 status: "error",
                 text: "Ошибка при проверке обновлений.",
-                url: "https://github.com/MjKey/AniXFlow/releases"
+                url: "https://github.com/pyanexya/AniTogether/actions"
             };
         } finally {
             if (updateStatus?.status !== "checking") {
@@ -52,17 +52,17 @@
 <div class="about-program flex-column">
     <div class="about-program-title flex-row">
         <img
-            src="./assets/icons/anixflow-transparent.png"
+            src="./assets/icons/anixartix.png"
             width="200px"
             alt="icon"
         />
         <div class="app-info flex-column">
-            <span class="app-title">AniXFlow</span>
+            <span class="app-title">AnixArtix</span>
             <p class="app-description">
                 Улучшенный неофициальный десктоп-клиент для приложения <strong
                     >Anixart</strong
                 > с открытым исходным кодом. Разработан с использованием
-                <strong>Node.js</strong>, <strong>Electron</strong>,
+                <strong>Rust</strong>, <strong>Tauri 2</strong>,
                 <strong>Svelte 5</strong>
                 и <strong>AnixartJS</strong>.
             </p>

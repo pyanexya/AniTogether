@@ -64,10 +64,10 @@ contextBridge.exposeInMainWorld('debugApi', {
 });
 
 contextBridge.exposeInMainWorld('shikimoriAuth', {
-  exchangeCode: (authCode, domain, clientId, clientSecret) =>
-    ipcRenderer.invoke('shikimori:exchangeCode', { authCode, domain, clientId, clientSecret }),
-  refreshToken: (refreshToken, domain, clientId, clientSecret) =>
-    ipcRenderer.invoke('shikimori:refreshToken', { refreshToken, domain, clientId, clientSecret }),
+  exchangeCode: (authCode, domain, clientId) =>
+    ipcRenderer.invoke('shikimori:exchangeCode', { authCode, domain, clientId }),
+  refreshToken: (refreshToken, domain, clientId) =>
+    ipcRenderer.invoke('shikimori:refreshToken', { refreshToken, domain, clientId }),
 });
 
 contextBridge.exposeInMainWorld('discordRPC', {

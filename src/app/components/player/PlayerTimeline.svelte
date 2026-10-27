@@ -3,6 +3,7 @@
     import utils from "../../utils";
 
     export let video = null;
+    export let playbackLocked = false;
     export let progressPercent = 0;
     export let loadedPercent = 0;
     export let isScrubbing = false;
@@ -20,7 +21,7 @@
         const percent = (Math.min(Math.max(0, e.clientX - rect.x), rect.width) / rect.width) * 100;
         mousePosPercent = percent;
 
-        if (isScrubbing && video && video.duration) {
+        if (!playbackLocked && isScrubbing && video && video.duration) {
             video.currentTime = (video.duration / 100) * percent;
             dispatch("scrub", {
                 time: video.currentTime,
@@ -35,7 +36,7 @@
             isScrubbing = false;
             window.removeEventListener("mousemove", handleWindowMouseMove);
             window.removeEventListener("mouseup", handleWindowMouseUp);
-            if (video) video.play();
+            if (video && !playbackLocked) video.play();
         }
     }
 
@@ -46,7 +47,7 @@
         const percent = (Math.min(Math.max(0, e.clientX - rect.x), rect.width) / rect.width) * 100;
         mousePosPercent = percent;
 
-        if (isScrubbing && video && video.duration) {
+        if (!playbackLocked && isScrubbing && video && video.duration) {
             video.currentTime = (video.duration / 100) * percent;
             dispatch("scrub", {
                 time: video.currentTime,
@@ -57,6 +58,7 @@
     }
 
     function timelineMouseDown(e) {
+        if (playbackLocked) return;
         if (!isScrubbing && video && video.duration) {
             isScrubbing = true;
             video.pause();
@@ -97,7 +99,8 @@
         onmousedown={timelineMouseDown}
         onmouseup={timelineMouseUp}
         role="slider"
-        aria-label="Timeline"
+        aria-label={playbackLocked ? "Таймлайн ведущего" : "Таймлайн"}
+        aria-disabled={playbackLocked}
         aria-valuenow={progressPercent}
         tabindex="0"
     >

@@ -33,13 +33,13 @@
         discordRPC.setActivity({
             type: 3,
             state: `Смотрит профиль ${data.profileInfo.profile.login}`,
-            details: "AniXFlow",
+            details: "AnixArtix",
             largeImageKey: `anidesk-transparent`,
-            largeImageText: 'AniXFlow - Anixart Client',
+            largeImageText: 'AnixArtix - Anixart Client',
             instance: true,
             buttons: [
                 { label: "Ссылка на профиль", url: `https://anixart.tv/profile/${data.profileInfo.profile.id}` },
-                { label: "Ссылка на клиент", url: "https://github.com/MjKey/AniXFlow" },
+                { label: "Ссылка на клиент", url: "https://github.com/pyanexya/AniTogether" },
             ],
         });
     });

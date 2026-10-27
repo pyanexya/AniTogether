@@ -41,14 +41,14 @@
                 state: "На странице релиза",
                 details: (data.release.title_ru || "").slice(0, 127),
                 largeImageKey: "anidesk-transparent",
-                largeImageText: "AniXFlow - Anixart Client",
+                largeImageText: "AnixArtix - Anixart Client",
                 instance: true,
                 buttons: [
                     {
                         label: "Ссылка на релиз",
                         url: `https://anixart.app/release/${data.release.id}`,
                     },
-                    { label: "Ссылка на клиент", url: "https://github.com/MjKey/AniXFlow" },
+                    { label: "Ссылка на клиент", url: "https://github.com/pyanexya/AniTogether" },
                 ],
             });
         }

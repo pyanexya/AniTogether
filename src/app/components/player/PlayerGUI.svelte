@@ -10,6 +10,7 @@
     import utils from "../../utils";
 
     export let args;
+    export let playbackLocked = false;
     export let video;
     export let isFullscreen;
     export let isHidden;
@@ -56,6 +57,7 @@
     }
 
     async function onElementClick(e) {
+        if (playbackLocked) { dropdownShowed = false; return; }
         const argsElement = e.detail;
 
         switch (argsElement.type) {
@@ -170,6 +172,7 @@
     }
 
     function showEpisodesDropdown(e) {
+        if (playbackLocked) return;
         if (e && e.stopPropagation) e.stopPropagation();
         const firstEp = args?.episodes?.[0];
         const dubberName = firstEp?.source?.type?.name ?? firstEp?.source?.name ?? "Серии";
@@ -186,6 +189,7 @@
     }
 
     async function showDubbersDropdown(e) {
+        if (playbackLocked) return;
         e.stopPropagation();
         const dubbers = await anixApi.release.getDubbers(args.release.id);
         dropdownElements = dubbers.types.map((z) => ({
@@ -202,6 +206,7 @@
     }
 
     async function showRelatedReleasesDropdown() {
+        if (playbackLocked) return;
         const related = await anixApi.release.getRelatedReleases(
             args.release.related.id,
             0,
@@ -268,9 +273,11 @@
     <div class="gui-middle-bar">
         <button
             class="gui-play-button"
+            disabled={playbackLocked}
+            title={playbackLocked ? "Воспроизведением управляет ведущий" : "Воспроизвести / пауза"}
             onclick={(e) => {
                 e.stopPropagation();
-                if (video) video.paused ? video.play() : video.pause();
+                if (video && !playbackLocked) video.paused ? video.play() : video.pause();
             }}
         >
             {#if isPaused}
@@ -285,6 +292,7 @@
     <div class="gui-bottom-bar flex-column">
         <!-- Controls Component -->
         <PlayerControls
+            {playbackLocked}
             {video}
             {isPaused}
             {currentTime}
@@ -308,6 +316,7 @@
         >
             <svelte:fragment slot="timeline">
                 <PlayerTimeline
+                    {playbackLocked}
                     {video}
                     {progressPercent}
                     {loadedPercent}
@@ -321,6 +330,7 @@
             </svelte:fragment>
 
             <svelte:fragment slot="skip-controls">
+                {#if !playbackLocked}
                 <PlayerSkipControls
                     {activeSkipType}
                     releaseId={args?.release?.id}
@@ -334,6 +344,7 @@
                         }
                     }}
                 />
+                {/if}
             </svelte:fragment>
         </PlayerControls>
     </div>
@@ -385,6 +396,7 @@
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
     }
 
+    .gui-play-button:disabled { opacity: 0.4; cursor: not-allowed; }
     .gui-play-button:hover {
         background-color: var(--player-middle-button-select);
         transform: scale(1.08);

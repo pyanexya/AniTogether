@@ -16,24 +16,24 @@
         if (isNavigating) return;
         isNavigating = true;
 
-        const hexPath = Array.from(new TextEncoder().encode(ep.filePath)).map(b => b.toString(16).padStart(2, '0')).join('');
-        const offlineUrl = `anixflow://${hexPath}`;
+        const offlineUrl = `offline-file:${encodeURIComponent(ep.filePath)}`;
 
         const mockSource = { id: 0, name: 'Offline', type: { id: 0, name: 'Оффлайн' }, '@id': 0 };
         const episodesMock = (args.anime.episodes || []).map(e => {
-            const epHex = Array.from(new TextEncoder().encode(e.filePath)).map(b => b.toString(16).padStart(2, '0')).join('');
             return {
                 position: e.id,
                 name: e.title,
                 source: mockSource,
-                url: `anixflow://${epHex}`
+                url: `offline-file:${encodeURIComponent(e.filePath)}`,
+                offlineFilePath: e.filePath
             };
         });
         const currentEpisodeMock = {
             position: ep.id,
             name: ep.title,
             source: mockSource,
-            url: offlineUrl
+            url: offlineUrl,
+            offlineFilePath: ep.filePath
         };
         
         updateViewportComponent(Pages.PLAYER, {
