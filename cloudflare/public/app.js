@@ -1,4 +1,5 @@
 import {request,authorizationUrl,validGrant,errorMessage,avatars} from './api.mjs';
+import {initAvatarEditor,safeAvatarUrl} from './avatar.mjs';
 const $=id=>document.getElementById(id);
 const storageKey='anixartix.pendingDesktopGrant';
 let capabilities=null,me=null,busy=false,grant=null,pairing=null,expiryTimer;
@@ -19,6 +20,8 @@ function updateButtons(){
  $('approve').disabled=busy||!pairing||pairing.expiresAt*1000<=Date.now()||!$('pairing-consent').checked;
  for(const id of ['unlink','logout','revoke','cancel-pairing'])$(id).disabled=busy;
  for(const control of $('profile-form').elements)control.disabled=busy;
+ $('upload-avatar').disabled=busy;
+ for(const button of $('avatar-choices').querySelectorAll('button'))button.disabled=busy;
 }
 async function perform(action){if(busy)return;busy=true;updateButtons();try{await action();}catch(error){notice(errorMessage(error),true);if(error.status===401){me=null;renderAccount();}if(error.code==='invalid_grant')clearPairing();}finally{busy=false;updateButtons();}}
 function renderCapabilities(){
@@ -31,10 +34,17 @@ function renderCapabilities(){
 }
 function renderAccount(){
  $('login').hidden=!!me;$('account').hidden=!me;
- if(!me){$('pairing').hidden=true;return;}
+ document.title=me?'AnixArtix · мой профиль':'AnixArtix · вход';
+ if(!me){$('pairing').hidden=true;avatarEditor.reset();return;}
  const profile=me.profile;
- for(const key of ['displayName','username','bio','avatar'])$('profile-form').elements.namedItem(key).value=profile[key]||'';
- $('avatar-preview').textContent=avatars[profile.avatar]||avatars[''];
+ for(const key of ['displayName','username','bio'])$('profile-form').elements.namedItem(key).value=profile[key]||'';
+ $('profile-title').textContent=profile.displayName||'Твой профиль';
+ $('profile-handle').textContent=profile.username?'@'+profile.username:'';
+ const avatarUrl=safeAvatarUrl(profile.avatarUrl);
+ $('avatar-image').hidden=!avatarUrl;$('avatar-symbol').hidden=!!avatarUrl;
+ if(avatarUrl)$('avatar-image').src=avatarUrl;else $('avatar-image').removeAttribute('src');
+ $('avatar-symbol').textContent=avatars[profile.avatar]||avatars[''];
+ for(const button of $('avatar-choices').querySelectorAll('button'))button.setAttribute('aria-pressed',String(!avatarUrl&&button.dataset.avatar===(profile.avatar||'')));
  $('identities').textContent=`Вход в этот аккаунт: ${(me.identities||[]).map(value=>({google:'Google',discord:'Discord'}[value])).filter(Boolean).join(', ')||'провайдер не указан'}.`;
  $('shikimori-state').textContent=me.shikimori?`Привязан: ${me.shikimori.nickname||'пользователь Shikimori'}`:capabilities?.providers?.shikimori?'Аккаунт не привязан.':'Привязка пока недоступна: OAuth Shikimori не настроен.';
  $('unlink').hidden=!me.shikimori;$('shikimori-consent').hidden=!!me.shikimori;
@@ -56,7 +66,7 @@ async function load(){
  try{
   capabilities=await request('/api/capabilities');renderCapabilities();
   try{await refreshMe();}catch(error){if(error.status!==401)throw error;me=null;renderAccount();}
-  notice(me?'Ты вошёл в AnixArtix. Управляй своим профилем ниже.':grant?'Для подтверждения входа в приложение сначала войди в свой аккаунт.':'Вход безопасно перенаправит тебя на сайт выбранного провайдера.');
+  notice(me?'':grant?'Для подтверждения входа в приложение сначала войди в свой аккаунт.':'Вход безопасно перенаправит тебя на сайт выбранного провайдера.');
   await inspectPairing();
  }catch(error){notice(errorMessage(error),true);$('retry').hidden=false;if(error.code==='invalid_grant')clearPairing();}
  updateButtons();
@@ -69,7 +79,6 @@ $('profile-form').addEventListener('submit',event=>{event.preventDefault();const
  $('save-status').textContent='Сохраняем…';
  try{await request('/api/me',{method:'PATCH',data,csrfToken:me.csrfToken});await refreshMe();$('save-status').textContent='Сохранено';notice('Профиль обновлён.');}catch(error){$('save-status').textContent='Не сохранено';throw error;}
 });});
-$('profile-form').elements.namedItem('avatar').addEventListener('change',event=>{$('avatar-preview').textContent=avatars[event.target.value]||avatars[''];});
 $('link-consent').addEventListener('change',updateButtons);
 $('link').addEventListener('click',()=>perform(async()=>{
  if(!$('link-consent').checked)return;
@@ -90,4 +99,6 @@ $('approve').addEventListener('click',()=>perform(async()=>{
 }));
 $('cancel-pairing').addEventListener('click',()=>{clearPairing();notice('Вход не подтверждён. Запрос в приложении истечёт автоматически.');});
 $('retry').addEventListener('click',()=>perform(load));
+const avatarEditor=initAvatarEditor({getMe:()=>me,isBusy:()=>busy,perform,onSaved:refreshMe});
+$('avatar-image').addEventListener('error',()=>{$('avatar-image').hidden=true;$('avatar-symbol').hidden=false;});
 captureGrant();perform(load);

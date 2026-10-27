@@ -1,3 +1,4 @@
+import {importDiscordAvatar} from './avatars.mjs';
 import {createRemoteJWKSet,jwtVerify} from 'jose';
 import {now,random,hash,cookie,setCookie,origin,fail,encrypt,decrypt,newSession} from './security.mjs';
 const googleKeys=createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
@@ -38,11 +39,12 @@ export async function completeOAuth(req,env,p,currentSession) {
  if(p==='shikimori'&&(!currentSession||row.user_id!==currentSession.user_id||row.session_hash!==currentSession.hash))fail(403,'link_session_changed');
  const tokens=await exchange(c,{grant_type:'authorization_code',code,redirect_uri:c.callback,...(p==='google'?{code_verifier:row.verifier}:{})});
  if(typeof tokens.access_token!=='string'||tokens.access_token.length>8192)fail(502,'provider_response_invalid');
- let identity;
+ let identity,discordUser;
  if(p==='google') {
   identity=await verifyGoogleIdentity(tokens.id_token,c.id,row.nonce);
  } else {
   const u=await remoteJson(p==='discord'?'https://discord.com/api/v10/users/@me':'https://shikimori.io/api/users/whoami',{headers:{Authorization:`Bearer ${tokens.access_token}`,'User-Agent':'AnixArtix'}});
+  if(p==='discord')discordUser=u;
   if(!/^\d{1,30}$/.test(String(u.id)))fail(502,'identity_invalid');identity={id:String(u.id),name:u.global_name||u.username||u.nickname};
  }
  if(p==='shikimori') {
@@ -60,6 +62,7 @@ export async function completeOAuth(req,env,p,currentSession) {
    env.DB.prepare('INSERT INTO identities(provider,provider_id,user_id) VALUES(?,?,?)').bind(p,identity.id,id)
   ]);account={user_id:id};
  }
+ if(p==='discord')await importDiscordAvatar(env,account.user_id,discordUser);
  const s=await newSession(env,account.user_id);
  if(currentSession)await env.DB.prepare('DELETE FROM sessions WHERE hash=?').bind(currentSession.hash).run();
  return s;

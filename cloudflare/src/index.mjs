@@ -1,3 +1,4 @@
+import {boundedBytes,validatePng,encodeAvatar,avatarResponse} from './avatars.mjs';
 import {now,random,hash,setCookie,json,origin,sameOrigin,body,rate,session,csrf,publicProfile,validateProfile,fail,HttpError} from './security.mjs';
 import {available,startOAuth,completeOAuth} from './oauth.mjs';
 export {WatchRooms} from './rooms.mjs';
@@ -15,9 +16,9 @@ export async function route(req,env) {
  if(!p.startsWith('/api/')) {
   if(!env.ASSETS||!['GET','HEAD'].includes(m))fail(404,'not_found');
   const path=['/','/profile','/desktop'].includes(p)?'/index.html':p;
-  if(!['/index.html','/styles.css','/app.js','/api.mjs','/assets/icons/anixartix.png'].includes(path))fail(404,'not_found');
+  if(!['/index.html','/styles.css','/app.js','/api.mjs','/avatar.mjs','/assets/icons/anixartix.png'].includes(path))fail(404,'not_found');
   const asset=await env.ASSETS.fetch(new Request(new URL(path,req.url),req));const response=new Response(asset.body,asset);
-  response.headers.set('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+  response.headers.set('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
   response.headers.set('X-Content-Type-Options','nosniff');response.headers.set('Referrer-Policy','no-referrer');response.headers.set('Cache-Control','no-store');return response;
  }
  if(!env.DB)fail(503,'database_not_configured');
@@ -60,6 +61,9 @@ export async function route(req,env) {
   }
   fail(405,'method_not_allowed');
  }
+ if(p.startsWith('/api/avatars/')&&m==='GET') {
+  const row=await env.DB.prepare('SELECT avatar FROM users WHERE id=?').bind(p.slice('/api/avatars/'.length)).first();return avatarResponse(row?.avatar);
+ }
  if(p.startsWith('/api/profiles/')&&m==='GET') {
   const row=await env.DB.prepare('SELECT id,username,display_name,bio,avatar FROM users WHERE id=?').bind(p.slice('/api/profiles/'.length)).first();if(!row)fail(404,'profile_not_found');return json(publicProfile(row));
  }
@@ -69,6 +73,13 @@ export async function route(req,env) {
   const link=await env.DB.prepare('SELECT provider_id,nickname FROM shikimori_links WHERE user_id=?').bind(s.user_id).first();
   const identities=await env.DB.prepare('SELECT group_concat(provider) AS providers FROM identities WHERE user_id=?').bind(s.user_id).first();
   return json({profile:publicProfile(row),csrfToken:s.csrf,identities:(identities.providers||'').split(',').filter(Boolean),shikimori:link?{id:link.provider_id,nickname:link.nickname}:null});
+ }
+ if(p==='/api/me/avatar'&&m==='PUT') {
+  await rate(req,env,'avatar-write',6);await rate(req,env,'avatar-user',6,s.user_id);
+  if(req.headers.get('Content-Type')?.split(';')[0]!=='image/png')fail(415,'png_required');
+  const avatar=await encodeAvatar(await validatePng(await boundedBytes(req.body)));
+  const saved=await env.DB.prepare('UPDATE users SET avatar=? WHERE id=? AND EXISTS(SELECT 1 FROM sessions WHERE hash=? AND expires>?)').bind(avatar,s.user_id,s.hash,now()).run();if(!saved.meta.changes)fail(401,'authentication_required');
+  const row=await env.DB.prepare('SELECT * FROM users WHERE id=?').bind(s.user_id).first();return json({profile:publicProfile(row)});
  }
  if(p==='/api/me'&&m==='PATCH') {
   await rate(req,env,'profile-write',15);const d=validateProfile(await body(req));const fields={username:'username',displayName:'display_name',bio:'bio',avatar:'avatar'};

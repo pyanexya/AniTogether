@@ -1,3 +1,4 @@
+import {storedAvatar} from './avatars.mjs';
 export const now = () => Math.floor(Date.now() / 1000);
 export class HttpError extends Error { constructor(status, code) { super(code); this.status = status; } }
 export const fail = (status, code) => { throw new HttpError(status, code); };
@@ -15,8 +16,8 @@ export async function body(req) {
  while(true) { const {value,done}=await reader.read(); if(done)break; total+=value.length; if(total>8192){await reader.cancel();fail(413,'body_too_large');} chunks.push(value); }
  try { const data=JSON.parse(new TextDecoder().decode(Uint8Array.from(chunks.flatMap(x=>Array.from(x))))); if(!data || typeof data!=='object' || Array.isArray(data))throw 0; return data; }catch{fail(400,'invalid_json');}
 }
-export async function rate(req,env,scope,limit=30) {
- const key=await hash(`${scope}:${req.headers.get('CF-Connecting-IP') || 'local'}`); const t=now();
+export async function rate(req,env,scope,limit=30,identity=null) {
+ const key=await hash(`${scope}:${identity || req.headers.get('CF-Connecting-IP') || 'local'}`); const t=now();
  const row=await env.DB.prepare('INSERT INTO rate_limits(key,count,expires) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET count=CASE WHEN expires<=? THEN 1 ELSE count+1 END, expires=CASE WHEN expires<=? THEN excluded.expires ELSE expires END RETURNING count').bind(key,t+60,t,t).first();
  if(row.count>limit) fail(429,'rate_limited');
 }
@@ -31,7 +32,7 @@ export async function newSession(env,userId) {
  await env.DB.prepare('INSERT INTO sessions(hash,user_id,csrf,expires,created_at) VALUES(?,?,?,?,?)').bind(await hash(token),userId,csrfToken,t+2592000,t).run();
  return {token,csrf:csrfToken,expires:t+2592000};
 }
-export function publicProfile(row) { return {id:row.id,username:row.username,displayName:row.display_name,bio:row.bio,avatar:row.avatar}; }
+export function publicProfile(row) { const image=storedAvatar(row.avatar);return {id:row.id,username:row.username,displayName:row.display_name,bio:row.bio,avatar:image?'':row.avatar,...(image?{avatarUrl:`/api/avatars/${encodeURIComponent(row.id)}?v=${image.version}`}:{})}; }
 export function validateProfile(data) {
  if(Object.keys(data).some(k=>!['username','displayName','bio','avatar'].includes(k)))fail(400,'unknown_field');
  const out={}; for(const [k,v] of Object.entries(data)) { if(typeof v!=='string')fail(400,'invalid_profile'); const s=v.trim();
