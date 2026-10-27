@@ -10,6 +10,7 @@ pub mod network;
 mod offline_core;
 mod offline_stream;
 pub mod settings;
+mod startup;
 #[cfg(feature = "desktop")]
 pub fn run() {
     use tauri::Manager;
@@ -31,6 +32,7 @@ pub fn run() {
             });
         })
         .setup(|app| {
+            let _ = startup::report(startup::StartupStage::NativeStarted);
             app.manage(account::Account::new().map_err(std::io::Error::other)?);
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
@@ -68,6 +70,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            startup::startup_report,
             account_host::account_start,
             account_host::account_poll,
             account_host::account_cancel,

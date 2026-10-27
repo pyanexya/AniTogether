@@ -95,19 +95,35 @@ export function createBridge({ invoke, listen, report = console.error }) {
     } };
 }
 
-export async function bootstrap({ target, native, loadApp, mountApp, report = console.error }) {
+export async function bootstrap({ target, native, loadApp, mountApp, report = console.error, onStage = () => {}, stageTimeout = 15000 }) {
     if (!native) throw new Error('AnixArtix нужно запускать как приложение Tauri. Браузерный режим не подключён к Rust.');
     const bridge = createBridge({ ...native, report });
+    const controller = new AbortController();
+    // Late native replies/imports never advance to mounting after a timeout.
+    const bounded = async (operation, label) => {
+        let timer;
+        try {
+            return await Promise.race([
+                Promise.resolve().then(operation),
+                new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`Запуск: превышено время ожидания (${label}). Повторите запуск.`)), stageTimeout); }),
+            ]);
+        } finally { clearTimeout(timer); }
+    };
     try {
-        const [baseSettings, versions] = await Promise.all([bridge.globals.settings.getAll(), bridge.globals.prc.getVersions()]);
+        onStage('bootstrap-started');
+        const [baseSettings, versions] = await bounded(() => Promise.all([bridge.globals.settings.getAll(), bridge.globals.prc.getVersions()]), 'настройки ядра');
         if (!baseSettings || typeof baseSettings !== 'object' || !versions || typeof versions !== 'object') throw new Error('Некорректный ответ нативного ядра');
+        onStage('settings-ready');
         if (versions.capabilities?.discord === false) {
             const unsupported = async () => ({ supported: false, error: 'Discord RPC пока недоступен в Tauri' });
             bridge.globals.discordRPC = { setActivity: unsupported, clearActivity: unsupported };
         }
         Object.assign(target, bridge.globals, { baseSettings, versions, nativePlatform: { runtime: 'tauri', capabilities: versions.capabilities || {} } });
-        const app = await loadApp();
-        await mountApp(app);
+        const app = await bounded(() => loadApp(controller.signal), 'загрузка интерфейса');
+        onStage('app-loaded');
+        onStage('mount-started');
+        await bounded(() => mountApp(app, controller.signal), 'отображение интерфейса');
+        onStage('app-mounted');
         return bridge;
-    } catch (error) { bridge.dispose(); throw error; }
+    } catch (error) { controller.abort(); bridge.dispose(); onStage('failed'); throw error; }
 }

@@ -64,6 +64,7 @@
     "allow-watch-invites-list",
     "allow-watch-invite-send",
     "allow-watch-invite-accept",
-    "allow-watch-invite-decline"
+    "allow-watch-invite-decline",
+    "allow-startup-report"
   ]
 }

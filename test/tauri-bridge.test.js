@@ -73,7 +73,7 @@ describe('actual Tauri compatibility bridge', () => {
         const loadApp = vi.fn(() => { expect(target.baseSettings.theme).toBe('dark'); expect(target.offlineApi).toBeTruthy(); return 'APP'; });
         const mountApp = vi.fn(); const pending = bootstrap({ target, native, loadApp, mountApp });
         await flush(); expect(loadApp).not.toHaveBeenCalled(); ready({ theme: 'dark' }); await pending;
-        expect(mountApp).toHaveBeenCalledWith('APP');
+        expect(mountApp).toHaveBeenCalledWith('APP', expect.any(AbortSignal));
     });
     it('fails closed outside native runtime or on bootstrap IPC failure', async () => {
         const loadApp = vi.fn(), mountApp = vi.fn();

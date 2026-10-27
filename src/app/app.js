@@ -6,6 +6,8 @@ import { installNativeFetch } from './platform/fetch.js';
 
 bootstrap({
     target: window,
+    // Native is a no-op unless the CI launcher opted in through its environment.
+    onStage: stage => { invoke('startup_report', { stage }).catch(() => {}); },
     report: (message, error) => {
         console.error(message, error);
         let status = document.getElementById('native-event-error');
@@ -22,15 +24,22 @@ bootstrap({
         installNativeFetch(window);
         return import('./App.svelte');
     },
-    mountApp: async ({ default: App }) => {
-        const { mount } = await import('svelte');
+    mountApp: async ({ default: App }, signal) => {
+        const { mount, tick } = await import('svelte');
+        if (signal.aborted) throw new Error('Запуск отменён');
         mount(App, { target: document.body });
+        await tick();
+        if (signal.aborted) throw new Error('Запуск отменён');
+        const root = document.querySelector('[data-anixartix-app]');
+        if (!root || !root.querySelector('.main-content')) throw new Error('Интерфейс не появился');
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        if (signal.aborted) throw new Error('Запуск отменён');
         document.getElementById('startup-status')?.remove();
         window.dispatchEvent(new Event('anixartix:ready'));
     },
 }).then(bridge => window.addEventListener('beforeunload', bridge.dispose, { once: true }))
 .catch(error => {
-    window.dispatchEvent(new Event('anixartix:ready'));
+    window.dispatchEvent(new Event('anixartix:failed'));
     console.error('Native startup failed', error);
     const panel = document.createElement('main');
     panel.style.cssText = 'max-width:640px;margin:12vh auto;padding:32px;font:16px system-ui;color:#eee;background:#24252b;border-radius:20px';

@@ -9,4 +9,5 @@
         if (retry) retry.hidden = false;
     }, 15000);
     window.addEventListener('anixartix:ready', () => clearTimeout(slowStartup), { once: true });
+    window.addEventListener('anixartix:failed', () => clearTimeout(slowStartup), { once: true });
 })();

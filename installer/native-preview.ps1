@@ -39,7 +39,15 @@ public static class AnixArtixWindowCapture {
 $process = $null
 try {
     $app = (Resolve-Path -LiteralPath (Join-Path $root 'src-tauri/target/x86_64-pc-windows-msvc/release/anixartix.exe')).Path
-    $process = Start-Process -FilePath $app -WorkingDirectory (Split-Path $app -Parent) -PassThru
+    $statePath = Join-Path $directory 'startup-state.json'
+    if (Test-Path -LiteralPath $statePath) { Remove-Item -LiteralPath $statePath -Force }
+    $previousSmokeDirectory = [Environment]::GetEnvironmentVariable('ANIXARTIX_SMOKE_DIR', 'Process')
+    try {
+        [Environment]::SetEnvironmentVariable('ANIXARTIX_SMOKE_DIR', (Resolve-Path -LiteralPath $directory).Path, 'Process')
+        $process = Start-Process -FilePath $app -WorkingDirectory (Split-Path $app -Parent) -PassThru
+    } finally {
+        [Environment]::SetEnvironmentVariable('ANIXARTIX_SMOKE_DIR', $previousSmokeDirectory, 'Process')
+    }
     $clock = [Diagnostics.Stopwatch]::StartNew()
     $window = [IntPtr]::Zero
     while ($clock.Elapsed.TotalSeconds -lt 30) {
@@ -50,10 +58,35 @@ try {
         Start-Sleep -Milliseconds 250
     }
     if ($window -eq [IntPtr]::Zero -or ![AnixArtixWindowCapture]::IsWindowVisible($window)) { throw 'No visible client window within 30 seconds. CI interactive session/startup may be unavailable.' }
-    # Allow WebView2/first-login UI to render; this is not an authentication or playback test.
-    Start-Sleep -Seconds 8
+    # Read only the fixed native diagnostic file. A splash/colour count is not readiness.
+    $ready = $false
+    $lastStage = 'none'
+    $startupFailure = $null
+    while ($clock.Elapsed.TotalSeconds -lt 60) {
+        $process.Refresh()
+        if ($process.HasExited) { throw "Client exited before app-mounted (exit $($process.ExitCode))." }
+        if (Test-Path -LiteralPath $statePath) {
+            try {
+                $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+                if ($state.schema -eq 1 -and $state.pid -eq $process.Id) {
+                    # Only enum values from native code enter the report; never arbitrary diagnostics.
+                    if ($state.stage -in @('native-started', 'bootstrap-started', 'settings-ready', 'app-loaded', 'mount-started', 'app-mounted', 'failed')) {
+                        $lastStage = $state.stage
+                        if ($lastStage -eq 'app-mounted') { $ready = $true; break }
+                        if ($lastStage -eq 'failed') { $startupFailure = 'Native startup reported failed.'; break }
+                    }
+                }
+            } catch {
+                # The writer may be atomically replacing the file; retry without accepting stale state.
+            }
+        }
+        Start-Sleep -Milliseconds 250
+    }
+    if (!$ready -and !$startupFailure) { $startupFailure = "No matching native app-mounted state within 60 seconds (last stage: $lastStage)." }
+    # Capture the launched HWND even on readiness failure, for diagnosis, never the desktop.
+    if ($ready) { Start-Sleep -Seconds 2 }
     $process.Refresh()
-    if ($process.HasExited) { throw "Client exited during render interval (exit $($process.ExitCode))." }
+    if ($process.HasExited) { throw "Client exited before capture (exit $($process.ExitCode))." }
     $bitmap = [AnixArtixWindowCapture]::Capture($window)
     try {
         $bitmap.Save((Join-Path $directory 'native-first-window.png'), [Drawing.Imaging.ImageFormat]::Png)
@@ -61,7 +94,8 @@ try {
         for ($y = 20; $y -lt $bitmap.Height - 20; $y += 12) {
             for ($x = 20; $x -lt $bitmap.Width - 20; $x += 12) { [void]$colors.Add($bitmap.GetPixel($x, $y).ToArgb()) }
         }
-        $result = "Visible built-client window captured: $($bitmap.Width)x$($bitmap.Height), sampled colours: $($colors.Count).`r`n"
+        $result = "Native startup readiness: $ready; stage: $lastStage; matched process: $($process.Id).`r`n"
+        $result += "Visible built-client window captured: $($bitmap.Width)x$($bitmap.Height), sampled colours: $($colors.Count).`r`n"
         if ($colors.Count -lt 8) {
             $result += "INCONCLUSIVE: image is near-uniform. Could be blank application content OR hardware WebView2/CI capture limitation. Inspect PNG; do not claim a rendered login screen.`r`n"
             Write-Warning 'Native window capture is near-uniform; visual verification remains inconclusive.'
@@ -70,6 +104,7 @@ try {
         [IO.File]::WriteAllText($reportPath, $result)
         Write-Host $result
     } finally { $bitmap.Dispose() }
+    if (!$ready) { throw $startupFailure }
 } catch {
     [IO.File]::WriteAllText($reportPath, "FAILED/UNVERIFIED: $($_.Exception.Message)`r`nNo successful native-render claim can be made. No desktop fallback was attempted.`r`n")
     throw

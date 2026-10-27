@@ -474,7 +474,7 @@
     };
 </script>
 
-<main>
+<main data-anixartix-app>
     {#if !isFullscreen}
         <TitleBar />
     {/if}
