@@ -1,20 +1,20 @@
 {
   "schemaVersion": 1,
   "release": {
-    "version": "0.1.0",
-    "commit": "99db8ae363458fc1b07088c1c7745c055be59465",
-    "date": "2026-10-27T18:55:51Z",
+    "version": "0.1.1",
+    "commit": "43ee07b997aede56e2b719a4fdd8c0dea3e350cf",
+    "date": "2026-10-28T12:27:13Z",
     "platform": "windows-x64",
     "signed": false,
     "installer": {
-      "url": "https://github.com/pyanexya/AniTogether/releases/download/v0.1.0/AnixArtix_0.1.0_x64-setup.exe",
-      "size": 7059456,
-      "sha256": "0e5666fe29f996777993b486b221b19aa74a09d8a053c6fc9b691f0b3d7e5169"
+      "url": "https://github.com/pyanexya/AniTogether/releases/download/v0.1.1/AnixArtix_0.1.1_x64-setup.exe",
+      "size": 7106560,
+      "sha256": "27799382849ff0b3828e76ce45a180be00e20ff3e94fee7565fb4e7b93ac02be"
     },
     "source": {
-      "url": "https://github.com/pyanexya/AniTogether/releases/download/v0.1.0/AnixArtix_0.1.0_source.zip",
-      "size": 3154724,
-      "sha256": "a282aeb321e8df61155e0234142b6e9dcaebae03f1296f028dd0e0b79c77b04c"
+      "url": "https://github.com/pyanexya/AniTogether/releases/download/v0.1.1/AnixArtix_0.1.1_source.zip",
+      "size": 3209608,
+      "sha256": "61c7461c358ba221bf2adcd84c6fa3c9b14a1ef905689592bc92a596f019b4b3"
     }
   }
 }
